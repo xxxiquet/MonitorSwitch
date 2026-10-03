@@ -1,13 +1,13 @@
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
+ . (Join-Path $PSScriptRoot 'Configuration-UI.ps1')
 $cfgPath = Join-Path $PSScriptRoot 'config.json'
 if (!(Test-Path -LiteralPath $cfgPath)) {
-    [Windows.Forms.MessageBox]::Show('Run Configure.cmd first to pair this device with Device 2.', 'MonitorSwitch') | Out-Null
-    exit 1
+    if (!(Show-DeviceSetup $cfgPath)) { exit }
 }
-$cfg = Get-Content -LiteralPath $cfgPath -Raw | ConvertFrom-Json
-if ($cfg.channel -notin @(1,3)) { throw 'Device number must be 1 or 3.' }
+$cfg = Convert-DeviceProfile (Get-Content -LiteralPath $cfgPath -Raw | ConvertFrom-Json)
+$script:restartTray = $false
 $mutex = [Threading.Mutex]::new($false, ('Local\MonitorSwitch-Tray-' + $cfg.channel))
 try { $owner = $mutex.WaitOne(0) } catch [Threading.AbandonedMutexException] { $owner = $true }
 if (!$owner) { $mutex.Dispose(); exit }
@@ -67,6 +67,22 @@ $autostart.Add_Click({
         $autostart.Checked = Test-Path -LiteralPath $script:startupLink
     } catch { [Windows.Forms.MessageBox]::Show($_.Exception.Message,'MonitorSwitch') | Out-Null }
 })
+$setup = $menu.Items.Add('Setup device...')
+$setup.Add_Click({
+    $wasRunning = $script:worker -and !$script:worker.HasExited
+    Stop-Worker
+    try {
+        if (Show-DeviceSetup $cfgPath) {
+            if (Test-Path -LiteralPath $script:startupLink) {
+                & (Join-Path $PSScriptRoot 'Setup-Autostart.ps1')
+                $newCfg = Get-Content -LiteralPath $cfgPath -Raw | ConvertFrom-Json
+                if ($newCfg.channel -ne $cfg.channel) { Remove-Item -LiteralPath $script:startupLink }
+            }
+            $script:restartTray = $true
+            [Windows.Forms.Application]::ExitThread()
+        } elseif ($wasRunning) { Start-Worker }
+    } catch { [Windows.Forms.MessageBox]::Show($_.Exception.Message,'MonitorSwitch') | Out-Null; if ($wasRunning) { Start-Worker } }
+})
 $diagnostics = New-Object Windows.Forms.ToolStripMenuItem('Diagnostics')
 $logs = $diagnostics.DropDownItems.Add('Open logs folder')
 $logs.Add_Click({ Start-Process explorer.exe -ArgumentList ('"' + $PSScriptRoot + '"') })
@@ -98,4 +114,8 @@ try {
     $timer.Stop(); $timer.Dispose(); Stop-Worker
     $tray.Visible = $false; $tray.Icon.Dispose(); $tray.Dispose(); $menu.Dispose()
     $mutex.ReleaseMutex(); $mutex.Dispose()
+}
+
+if ($script:restartTray) {
+    Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -ArgumentList ('-NoLogo -NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + (Join-Path $PSScriptRoot 'MonitorSwitch-Tray.ps1') + '"') -WindowStyle Hidden
 }

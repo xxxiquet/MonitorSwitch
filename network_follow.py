@@ -32,7 +32,7 @@ def decode_packet(raw, keys, now, seen):
         fields = {'v', 'channel', 'id', 'time', 'episode', 'mac'} if ready else {'v', 'channel', 'active', 'id', 'time', 'episode', 'mac'}
         if set(p) != fields:
             return None
-        if p['v'] not in (1, 2) or type(p['channel']) is not int or p['channel'] not in (1, 3):
+        if p['v'] not in (1, 2) or type(p['channel']) is not int or p['channel'] not in keys:
             return None
         if not ready and (type(p['active']) is not int or p['active'] not in (0, 1)):
             return None
@@ -67,8 +67,13 @@ def main():
     return_input = args.return_input
     if not 1 <= return_input <= 255:
         parser.error('--return-input must be between 1 and 255')
+    mac_channel = config.get('macChannel', 2)
+    if type(mac_channel) is not int or mac_channel not in (1, 2, 3):
+        parser.error('macChannel must be 1, 2 or 3')
     display_uuid = config.get('displayUUID', '')
     keys = {int(k): bytes.fromhex(v) for k, v in config['keys'].items()}
+    if mac_channel in keys or any(ch not in (1, 2, 3) for ch in keys):
+        parser.error('Pairing keys must belong to remote channels')
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((config['macIP'], config['port']))
     sock.settimeout(0.02)
@@ -80,16 +85,16 @@ def main():
         with LOG.open('a') as f:
             f.write(line + '\n')
 
-    seen, states, retired = {}, {1: None, 3: None}, set()
+    seen, states, retired = {}, {ch: None for ch in keys}, set()
     peers = {}
     last_episodes = {}
-    last_channel = 2
+    last_channel = mac_channel
     ready_hosts = {}
     mac_connected = False
     for line in KEYBOARD_LOG.read_text().splitlines()[-500:]:
         if 'Easy-Switch enabled ·' in line or 'HID: keyboard disconnected' in line or 'Keyboard service access denied' in line:
             mac_connected = False
-        elif 'Keyboard on channel 2 ·' in line:
+        elif f'Keyboard on channel {mac_channel} ·' in line:
             mac_connected = True
 
     def return_to_mac(host):
@@ -103,7 +108,7 @@ def main():
         encoded = json.dumps(request).encode()
         for _ in range(3):
             sock.sendto(encoded, peers[host])
-        log(f'Request USB-C through active device channel {host}')
+        log(f'Request coordinator input through active device channel {host}')
     mode = 'APP EVENTS: DDC managed by MonitorSwitch' if args.emit_events else ('LIVE' if args.live else 'TEST: monitor unchanged')
     log(f"Listening on port {config['port']}; {mode}")
     with KEYBOARD_LOG.open() as keyboard:
@@ -141,19 +146,19 @@ def main():
                 for line in keyboard.readlines():
                     if 'HID: keyboard disconnected' in line or 'Keyboard service access denied' in line:
                         mac_connected = False
-                    if 'Keyboard on channel 2 ·' in line or 'TEST: channel=2 input=16' in line:
-                        channel = 2
+                    if f'Keyboard on channel {mac_channel} ·' in line or f'TEST: channel={mac_channel} input={return_input}' in line:
+                        channel = mac_channel
                         mac_connected = True
-                        log('Mac: keyboard confirmed on channel 2')
-                if channel == 2 and last_channel == 2:
+                        log(f'Mac: keyboard confirmed on channel {mac_channel}')
+                if channel == mac_channel and last_channel == mac_channel:
                     for host in ready_hosts:
                         return_to_mac(host)
                 if channel is not None and channel != last_channel:
                     # A positively identified new host retires the previous
                     # connection episode. Late/lost UDP disconnects cannot
                     # make an old heartbeat pull the monitor back.
-                    if channel == 2 and args.emit_events:
-                        hosts = (last_channel,) if last_channel in (1, 3) else tuple(ready_hosts)
+                    if channel == mac_channel and args.emit_events:
+                        hosts = (last_channel,) if last_channel in keys else tuple(ready_hosts)
                         for host in hosts:
                             return_to_mac(host)
                     for ch in states:
@@ -162,7 +167,7 @@ def main():
                             states[ch] = None
                     last_channel = channel
                     if args.emit_events:
-                        if channel in (1, 3):
+                        if channel in keys:
                             print(f'MONITORSWITCH_CHANNEL:{channel}', flush=True)
                     elif args.live:
                         try:

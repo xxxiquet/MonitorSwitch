@@ -1,7 +1,11 @@
 ﻿param([string]$Config = (Join-Path $PSScriptRoot 'config.json'))
 $ErrorActionPreference = 'Stop'
 $cfg = Get-Content -LiteralPath $Config -Raw | ConvertFrom-Json
-if ($cfg.channel -notin @(1,3)) { throw 'Expected channel 1 or 3 in config.json' }
+if (!$cfg.macChannel) { $cfg | Add-Member macChannel 2 }
+if (!$cfg.returnInput) { $cfg | Add-Member returnInput 16 }
+if (!$cfg.monitorModel) { $cfg | Add-Member monitorModel 'G274QPF' }
+if ($cfg.channel -notin @(1,2,3) -or $cfg.macChannel -notin @(1,2,3) -or $cfg.channel -eq $cfg.macChannel) { throw 'Choose different valid local and macOS device numbers.' }
+if ([int]$cfg.returnInput -lt 1 -or [int]$cfg.returnInput -gt 255) { throw 'Return input must be between 1 and 255.' }
 if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') {
     throw 'Windows policy blocks native HID access (Constrained Language Mode). No policy changes were made.'
 }
@@ -144,6 +148,8 @@ public static class MonitorSwitchDdc {
         uint type,current,maximum;
         return GetVCPFeatureAndVCPFeatureReply(monitor,0x60,out type,out current,out maximum) ? current.ToString()+" (0x"+current.ToString("X2")+")" : "read failed, error="+Marshal.GetLastWin32Error();
     }
+    public static uint ReturnInput = 16;
+    public static string MonitorModel = "G274QPF";
     public static string Probe(string instance) { return Inspect(instance,false); }
     public static string ReturnToMac(string instance) { return Inspect(instance,true); }
     static string Inspect(string instance,bool write) {
@@ -166,9 +172,9 @@ public static class MonitorSwitchDdc {
             var physical=new Physical[count];
             if (!GetPhysicalMonitorsFromHMONITOR(monitor,count,physical)) return true;
             try { foreach(var p in physical) {
-                if (!match && (p.Description==null || p.Description.IndexOf("G274QPF",StringComparison.OrdinalIgnoreCase)<0)) continue;
+                if (!match && (p.Description==null || p.Description.IndexOf(MonitorModel,StringComparison.OrdinalIgnoreCase)<0)) continue;
                 found=true;
-                report.Append("MSI matched: "+p.Description+"; ");
+                report.Append("Monitor matched: "+p.Description+"; ");
                 if (!write) report.Append("input="+ReadInput(p.Handle)+"; ");
                 if (!write) {
                     uint length;
@@ -178,16 +184,16 @@ public static class MonitorSwitchDdc {
                         else report.Append("capabilities failed, error="+Marshal.GetLastWin32Error()+"; ");
                     } else report.Append("capabilities length unavailable; ");
                 } else {
-                    bool accepted=SetVCPFeature(p.Handle,0x60,16);
+                    bool accepted=SetVCPFeature(p.Handle,0x60,ReturnInput);
                     int error=Marshal.GetLastWin32Error();
                     if(accepted) sent=true;
-                    report.Append("SetVCP 0x60=16 accepted="+accepted+", error="+(accepted?0:error)+"; ");
+                    report.Append("SetVCP 0x60="+ReturnInput+" accepted="+accepted+", error="+(accepted?0:error)+"; ");
                     report.Append("image not verified; ");
                 }
             } } finally { DestroyPhysicalMonitors(count,physical); }
             return true;
         },IntPtr.Zero);
-        return report.ToString()+(sent ? "USB-C command sent through HDMI" : (found ? (write ? "USB-C DDC write failed" : "probe finished") : "MSI G274QPF not identified; no display changed"));
+        return report.ToString()+(sent ? "Coordinator input command sent" : (found ? (write ? "Coordinator input DDC write failed" : "probe finished") : "Configured monitor not identified; no display changed"));
     }
 }
 
@@ -208,7 +214,7 @@ public static class MonitorSwitchReturnListener {
             var clock=System.Diagnostics.Stopwatch.StartNew();
             string result=MonitorSwitchDdc.ReturnToMac(monitorInstance);
             clock.Stop();
-            if(result.EndsWith("USB-C command sent through HDMI")) returnedEpisode=current;
+            if(result.EndsWith("Coordinator input command sent")) returnedEpisode=current;
             string line=DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")+" "+source+"; "+result+"; DDC duration="+clock.ElapsedMilliseconds+"ms";
             Console.WriteLine(line);
             System.IO.File.AppendAllText(diagnosticPath,line+Environment.NewLine);
@@ -224,14 +230,14 @@ public static class MonitorSwitchReturnListener {
     public static bool Authenticate(string json,byte[] key,long now) {
         if(json.Length>1024) return false;
         string version=Field(json,"v","(1)(?=\\s*[,}])");
-        string input=Field(json,"input","(16)(?=\\s*[,}])");
+        string input=Field(json,"input","([0-9]{1,3})(?=\\s*[,}])");
         string id=Field(json,"id","\"([a-f0-9]{32})\"");
         string timestamp=Field(json,"time","([0-9]{1,12})(?=\\s*[,}])");
         string packetEpisode=Field(json,"episode","\"([a-f0-9]{32})\"");
         string mac=Field(json,"mac","\"([a-f0-9]{64})\"");
         long time;
-        if(version!="1" || input!="16" || id.Length!=32 || mac.Length!=64 || !Int64.TryParse(timestamp,out time) || Math.Abs(now-time)>15) return false;
-        string canonical="input|1|16|"+id+"|"+timestamp+"|"+packetEpisode;
+        if(version!="1" || input!=MonitorSwitchDdc.ReturnInput.ToString() || id.Length!=32 || mac.Length!=64 || !Int64.TryParse(timestamp,out time) || Math.Abs(now-time)>15) return false;
+        string canonical="input|1|"+input+"|"+id+"|"+timestamp+"|"+packetEpisode;
         byte[] digest;
         using(var h=new System.Security.Cryptography.HMACSHA256(key)) digest=h.ComputeHash(System.Text.Encoding.UTF8.GetBytes(canonical));
         string expected=BitConverter.ToString(digest).Replace("-","").ToLowerInvariant();
@@ -316,13 +322,15 @@ function Log([string]$message) {
     Write-Host $line; Add-Content -LiteralPath $logFile -Value $line
 }
 $seenCommands=@{}
+[MonitorSwitchDdc]::ReturnInput = [uint32]$cfg.returnInput
+[MonitorSwitchDdc]::MonitorModel = $cfg.monitorModel
 $msiInstance=''
 try {
     foreach ($m in Get-CimInstance -Namespace root/wmi -ClassName WmiMonitorID) {
         $friendly=-join ($m.UserFriendlyName | Where-Object { $_ -ne 0 } | ForEach-Object { [char]$_ })
-        if ($friendly -match 'G274QPF') { $msiInstance=$m.InstanceName -replace '_\d+$',''; break }
+        if ($friendly.IndexOf($cfg.monitorModel,[StringComparison]::OrdinalIgnoreCase) -ge 0) { $msiInstance=$m.InstanceName -replace '_\d+$',''; break }
     }
-} catch { Log 'Monitor identity lookup unavailable; will require MSI name from display driver' }
+} catch { Log 'Monitor identity lookup unavailable; will require configured monitor name from display driver' }
 function Announce-Ready {
     $id=[Guid]::NewGuid().ToString('N')
     $stamp=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
@@ -343,11 +351,11 @@ function Announce([bool]$active) {
     [void]$udp.Send($bytes,$bytes.Length,$endpoint)
 }
 
-Log "MonitorSwitch 0.8.0 receiver ready at startup: channel $($cfg.channel), Device 2 $($cfg.macIP). Authenticated USB-C return enabled; no pairing changes."
+Log "MonitorSwitch 0.9.0 receiver ready at startup: channel $($cfg.channel), macOS device $($cfg.macChannel) at $($cfg.macIP). Authenticated coordinator return enabled; no pairing changes."
 Log ([MonitorSwitchDdc]::Probe($msiInstance))
 $ctx=$null; $active=$false; $good=0; $miss=0; $lastSent=0; $script:episode=[Guid]::NewGuid().ToString('N')
 [MonitorSwitchReturnListener]::Start($udp,$key,$cfg.macIP,$msiInstance,$logFile)
-[MonitorSwitchReturnListener]::EnableFastReturn($cfg.channel -eq 3)
+[MonitorSwitchReturnListener]::EnableFastReturn($cfg.channel -eq 3 -and $cfg.macChannel -eq 2)
 [MonitorSwitchReturnListener]::SetEpisode($script:episode)
 Announce-Ready
 $lastReady=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()

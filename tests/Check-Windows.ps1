@@ -9,6 +9,16 @@ foreach ($file in Get-ChildItem (Join-Path $root 'windows') -Filter '*.ps1') {
 }
 if ($errorsFound) { throw 'PowerShell syntax validation failed.' }
 if ($env:OS -eq 'Windows_NT') {
+    . (Join-Path $root 'windows/Configuration-UI.ps1')
+    $profile = [pscustomobject]@{deviceType='Windows';channel=2;macChannel=1;macIP='192.0.2.1';key=('ab'*32);returnInput=17;monitorModel='Example monitor';port=25347}
+    $valid = Convert-DeviceProfile $profile
+    if ($valid.channel -ne 2 -or $valid.macChannel -ne 1 -or $valid.returnInput -ne 17) { throw 'Device profile mapping was lost.' }
+    $profile.channel=1; $rejected=$false
+    try { Convert-DeviceProfile $profile | Out-Null } catch { $rejected=$true }
+    if (!$rejected) { throw 'Duplicate device assignment accepted.' }
+    $profile.channel=2; $profile.deviceType='macOS'; $rejected=$false
+    try { Convert-DeviceProfile $profile | Out-Null } catch { $rejected=$true }
+    if (!$rejected) { throw 'Windows helper accepted macOS device profile.' }
     $text = Get-Content -LiteralPath (Join-Path $root 'windows/MonitorSwitch-Windows.ps1') -Raw
     $source = [regex]::Match($text,"(?s)Add-Type -TypeDefinition @'\r?\n(.*?)\r?\n'@").Groups[1].Value
     if (!$source) { throw 'Native helper source not found.' }

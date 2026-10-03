@@ -27,6 +27,12 @@ class AuthenticatedEvents(unittest.TestCase):
         seen={};raw=self.signed(self.event)
         self.assertEqual(relay.decode_packet(raw,self.keys,1000,seen)['channel'],3)
         self.assertIsNone(relay.decode_packet(raw,self.keys,1000,seen))
+    def test_remote_channel_two_with_coordinator_on_one(self):
+        self.keys={2:bytes.fromhex('ab'*32),3:bytes.fromhex('cd'*32)}
+        event=dict(self.event,channel=2)
+        self.assertEqual(relay.decode_packet(self.signed(event),self.keys,1000,{})['channel'],2)
+        packet=json.loads(self.signed(event));packet['channel']=1
+        self.assertIsNone(relay.decode_packet(json.dumps(packet).encode(),self.keys,1000,{}))
     def test_startup_readiness_without_keyboard(self):
         event=dict(self.event,v=2);event.pop('active')
         self.assertEqual(relay.decode_packet(self.signed(event),self.keys,1000,{})['v'],2)
@@ -50,6 +56,7 @@ class ReleaseContents(unittest.TestCase):
                 names=archive.namelist()
                 self.assertTrue(any(n.endswith('/MonitorSwitch-Tray.ps1') for n in names))
                 self.assertTrue(any(n.endswith('/README.md') for n in names))
+                self.assertTrue(any(n.endswith('/Configuration-UI.ps1') for n in names))
                 self.assertFalse(any(n.endswith(('.log','config.json')) for n in names))
     def test_private_packages_use_the_given_device_key_only(self):
         with tempfile.TemporaryDirectory() as tmp:

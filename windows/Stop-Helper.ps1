@@ -1,6 +1,6 @@
 $ErrorActionPreference='Stop'
 $cfg=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'config.json') -Raw | ConvertFrom-Json
-if($cfg.channel -notin @(1,3)){throw 'Expected channel 1 or 3'}
+if($cfg.channel -notin @(1,2,3)){throw 'Expected channel 1, 2 or 3'}
 $tray=Join-Path $PSScriptRoot 'MonitorSwitch-Tray.ps1'
 $deviceInstalled=Join-Path $env:LOCALAPPDATA ('MonitorSwitch\Device'+$cfg.channel+'\MonitorSwitch-Windows.ps1')
 $deviceTray=Join-Path $env:LOCALAPPDATA ('MonitorSwitch\Device'+$cfg.channel+'\MonitorSwitch-Tray.ps1')

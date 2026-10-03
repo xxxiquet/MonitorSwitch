@@ -9,7 +9,7 @@ import shutil
 import zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-WINDOWS_FILES = ('Start.cmd', 'Configure.cmd', 'Configure.ps1', 'MonitorSwitch-Tray.ps1',
+WINDOWS_FILES = ('Configuration-UI.ps1', 'Start.cmd', 'Configure.cmd', 'Configure.ps1', 'MonitorSwitch-Tray.ps1',
                  'MonitorSwitch-Windows.ps1', 'Setup-Autostart.ps1',
                  'Export-Diagnostics.ps1', 'Run-Diagnostic.cmd', 'README.md',
                  'Enable-Autostart.cmd', 'Disable-Autostart.cmd', 'Stop-Helper.cmd', 'Stop-Helper.ps1')
