@@ -544,7 +544,7 @@ static void hidRemoved(void *context, IOReturn result, void *sender, IOHIDDevice
 - (void)openLog:(id)sender { [NSWorkspace.sharedWorkspace openURL:[NSURL fileURLWithPath:self.logPath.stringByDeletingLastPathComponent]]; }
 - (void)about:(id)sender {
     NSAlert *alert = NSAlert.new; alert.messageText = @"MonitorSwitch";
-    alert.informativeText = @"MonitorSwitch 0.9.0\n\nLocal Easy-Switch display control. No subscription, account or cloud.\n\nConfigure one macOS device and up to two Windows devices. Windows helpers confirm their channels over your local network. Only Logitech service reports are used; typed keys are not recorded.\n\nIncludes m1ddc (MIT).";
+    alert.informativeText = @"MonitorSwitch 0.9.1\n\nLocal Easy-Switch display control. No subscription, account or cloud.\n\nConfigure one macOS device and up to two Windows devices. Windows helpers confirm their channels over your local network. Only Logitech service reports are used; typed keys are not recorded.\n\nIncludes m1ddc (MIT).";
     [NSApp activateIgnoringOtherApps:YES]; [alert runModal];
 }
 - (void)quit:(id)sender { [NSApp terminate:nil]; }

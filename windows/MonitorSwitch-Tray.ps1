@@ -21,7 +21,7 @@ public static class TrayArtwork {
         using(var bitmap = new Bitmap(32,32)) using(var g = Graphics.FromImage(bitmap)) {
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             g.Clear(Color.Transparent);
-            using(var background = new SolidBrush(Color.FromArgb(45,108,240))) g.FillEllipse(background,1,1,30,30);
+            using(var background = new SolidBrush(Color.Black)) g.FillEllipse(background,1,1,30,30);
             using(var p = new Pen(Color.White,2)) {
                 g.DrawRectangle(p,7,8,18,12); g.DrawLine(p,16,20,16,24); g.DrawLine(p,11,24,21,24);
                 g.DrawLine(p,10,13,21,13); g.DrawLine(p,18,10,21,13); g.DrawLine(p,18,16,21,13);

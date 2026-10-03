@@ -7,7 +7,7 @@ A tray app that follows the physical Logitech Easy-Switch buttons and switches a
 1. In the macOS app, use **Setup devices…** to assign device numbers and inputs, then **Export Windows profiles…**. Transfer this computer's private JSON profile to Windows.
 2. Extract the complete Windows archive to a writable folder. Keep its files together and quit any older helper before upgrading.
 3. Run **Start.cmd**. On first launch the setup form opens: click **Import profile…**, select your profile and click **Save**. An existing configured package starts directly.
-4. Find the blue monitor icon in the notification area, including the hidden-icons arrow. Right-click it for **Setup device…** and the other options. **Configure.cmd** also opens setup without launching the helper.
+4. Find the black-and-white monitor icon in the notification area, including the hidden-icons arrow. Right-click it for **Setup device…** and the other options. **Configure.cmd** also opens setup without launching the helper.
 5. Press the physical keyboard buttons to test switching. If you change the macOS setup, export and import fresh profiles.
 
 The setup form includes system type, local device number, macOS coordinator number and LAN address, a masked pairing key, the coordinator monitor input, Windows monitor name and port. Select **Windows** for this computer. Configure **macOS** devices in the macOS app. Device numbers can be 1, 2 or 3, but must differ from the coordinator.
