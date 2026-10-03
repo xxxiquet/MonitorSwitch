@@ -1,0 +1,23 @@
+# Private pairing material and hardware-specific configuration
+network-config.json
+config.json
+private/
+pairing/
+**/config.json
+*.log
+*.zip
+*.dmg
+*.app/
+# Build outputs and historical experiments
+build/
+__pycache__/
+*.pyc
+HIDProbe
+HIDProbe.m
+/MonitorSwitch-Windows.ps1
+windows/MonitorSwitch-Capture.ps1
+vendor/m1ddc/.objects/
+vendor/m1ddc/m1ddc
+vendor/m1ddc/library/
+assets/MonitorSwitch.iconset/
+.DS_Store
