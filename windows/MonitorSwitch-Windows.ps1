@@ -351,7 +351,7 @@ function Announce([bool]$active) {
     [void]$udp.Send($bytes,$bytes.Length,$endpoint)
 }
 
-Log "MonitorSwitch 0.9.3 receiver ready at startup: channel $($cfg.channel), macOS device $($cfg.macChannel) at $($cfg.macIP). Authenticated coordinator return enabled; no pairing changes."
+Log "MonitorSwitch 0.9.4 receiver ready at startup: channel $($cfg.channel), macOS device $($cfg.macChannel) at $($cfg.macIP). Authenticated coordinator return enabled; no pairing changes."
 Log ([MonitorSwitchDdc]::Probe($msiInstance))
 $ctx=$null; $active=$false; $good=0; $miss=0; $lastSent=0; $script:episode=[Guid]::NewGuid().ToString('N')
 [MonitorSwitchReturnListener]::Start($udp,$key,$cfg.macIP,$msiInstance,$logFile)

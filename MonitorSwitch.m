@@ -117,9 +117,9 @@ static void hidRemoved(void *context, IOReturn result, void *sender, IOHIDDevice
     self.pendingChannel = NSNotFound;
     self.requestedChannel = NSNotFound;
     self.statusItem = [[NSStatusBar systemStatusBar] statusItemWithLength:NSVariableStatusItemLength];
-    NSImage *menuIcon = [NSApp.applicationIconImage copy];
+    NSImage *menuIcon = [[NSImage alloc] initWithContentsOfFile:[NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:@"MenuBarIcon.png"]];
     menuIcon.size = NSMakeSize(18, 18);
-    menuIcon.template = NO;
+    menuIcon.template = YES;
     self.statusItem.button.image = menuIcon;
     self.statusItem.button.accessibilityLabel = @"MonitorSwitch";
     [self rebuildMenu];
@@ -150,7 +150,7 @@ static void hidRemoved(void *context, IOReturn result, void *sender, IOHIDDevice
     NSMenuItem *header = [self item:@"MonitorSwitch" action:nil tag:0];
     NSView *view = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 300, 62)];
     NSImageView *icon = [[NSImageView alloc] initWithFrame:NSMakeRect(16, 14, 36, 36)];
-    icon.image = NSApp.applicationIconImage; [view addSubview:icon];
+    icon.image = self.statusItem.button.image; icon.contentTintColor = NSColor.labelColor; [view addSubview:icon];
     NSTextField *title = [NSTextField labelWithString:@"MonitorSwitch"];
     title.font = [NSFont boldSystemFontOfSize:14]; title.frame = NSMakeRect(64, 32, 218, 20); [view addSubview:title];
     NSTextField *subtitle = [NSTextField labelWithString:@"One keyboard. One display. Three devices."];
@@ -546,7 +546,7 @@ static void hidRemoved(void *context, IOReturn result, void *sender, IOHIDDevice
 - (void)openLog:(id)sender { [NSWorkspace.sharedWorkspace openURL:[NSURL fileURLWithPath:self.logPath.stringByDeletingLastPathComponent]]; }
 - (void)about:(id)sender {
     NSAlert *alert = NSAlert.new; alert.messageText = @"MonitorSwitch";
-    alert.informativeText = @"MonitorSwitch 0.9.3\n\nLocal Easy-Switch display control. No subscription, account or cloud.\n\nConfigure one macOS device and up to two Windows devices. Windows helpers confirm their channels over your local network. Only Logitech service reports are used; typed keys are not recorded.\n\nIncludes m1ddc (MIT).";
+    alert.informativeText = @"MonitorSwitch 0.9.4\n\nLocal Easy-Switch display control. No subscription, account or cloud.\n\nConfigure one macOS device and up to two Windows devices. Windows helpers confirm their channels over your local network. Only Logitech service reports are used; typed keys are not recorded.\n\nIncludes m1ddc (MIT).";
     [NSApp activateIgnoringOtherApps:YES]; [alert runModal];
 }
 - (void)quit:(id)sender { [NSApp terminate:nil]; }

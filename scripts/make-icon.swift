@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 let folder = CommandLine.arguments[1]
+let menuBar = ProcessInfo.processInfo.environment["MONITORSWITCH_MENU_BAR"] == "1"
 let fm = FileManager.default
 try fm.createDirectory(atPath: folder, withIntermediateDirectories: true)
 for size in [16,32,64,128,256,512,1024] {
@@ -10,13 +11,21 @@ for size in [16,32,64,128,256,512,1024] {
     NSGraphicsContext.saveGraphicsState()
     NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
     let n=CGFloat(size)
-    NSColor.black.setFill()
-    NSBezierPath(roundedRect:NSRect(x:n*0.06,y:n*0.06,width:n*0.88,height:n*0.88),xRadius:n*0.2,yRadius:n*0.2).fill()
+    if menuBar {
+        let transform = NSAffineTransform()
+        transform.translateX(by: n * 0.5, yBy: n * 0.5)
+        transform.scale(by: 1.4)
+        transform.translateX(by: -n * 0.5, yBy: -n * 0.5)
+        transform.concat()
+    } else {
+        NSColor.black.setFill()
+        NSBezierPath(roundedRect:NSRect(x:n*0.06,y:n*0.06,width:n*0.88,height:n*0.88),xRadius:n*0.2,yRadius:n*0.2).fill()
+    }
     let frame=NSBezierPath(roundedRect:NSRect(x:n*0.19,y:n*0.31,width:n*0.62,height:n*0.42),xRadius:n*0.055,yRadius:n*0.055)
-    NSColor.white.setStroke(); frame.lineWidth=n*0.042;frame.stroke()
-    let stand=NSBezierPath();stand.move(to:NSPoint(x:n*0.5,y:n*0.30));stand.line(to:NSPoint(x:n*0.5,y:n*0.22));stand.move(to:NSPoint(x:n*0.36,y:n*0.22));stand.line(to:NSPoint(x:n*0.64,y:n*0.22));stand.lineWidth=n*0.04;stand.lineCapStyle = .round;stand.stroke()
+    NSColor.white.setStroke(); frame.lineWidth=n*(menuBar ? 0.06 : 0.042);frame.stroke()
+    let stand=NSBezierPath();stand.move(to:NSPoint(x:n*0.5,y:n*0.30));stand.line(to:NSPoint(x:n*0.5,y:n*0.22));stand.move(to:NSPoint(x:n*0.36,y:n*0.22));stand.line(to:NSPoint(x:n*0.64,y:n*0.22));stand.lineWidth=n*(menuBar ? 0.055 : 0.04);stand.lineCapStyle = .round;stand.stroke()
     NSColor.white.setStroke()
-    let arrows=NSBezierPath();arrows.lineWidth=n*0.03;arrows.lineCapStyle = .round;arrows.lineJoinStyle = .round
+    let arrows=NSBezierPath();arrows.lineWidth=n*(menuBar ? 0.045 : 0.03);arrows.lineCapStyle = .round;arrows.lineJoinStyle = .round
     arrows.move(to:NSPoint(x:n*0.32,y:n*0.59));arrows.line(to:NSPoint(x:n*0.68,y:n*0.59));arrows.line(to:NSPoint(x:n*0.61,y:n*0.65));arrows.move(to:NSPoint(x:n*0.68,y:n*0.59));arrows.line(to:NSPoint(x:n*0.61,y:n*0.53))
     arrows.move(to:NSPoint(x:n*0.68,y:n*0.44));arrows.line(to:NSPoint(x:n*0.32,y:n*0.44));arrows.line(to:NSPoint(x:n*0.39,y:n*0.50));arrows.move(to:NSPoint(x:n*0.32,y:n*0.44));arrows.line(to:NSPoint(x:n*0.39,y:n*0.38));arrows.stroke()
     NSGraphicsContext.restoreGraphicsState()

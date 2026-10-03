@@ -10,6 +10,7 @@ cp vendor/m1ddc/LICENSE "$bundle/Contents/Resources/m1ddc-LICENSE.txt"
 cp LICENSE "$bundle/Contents/Resources/LICENSE.txt"
 cp README.md "$bundle/Contents/Resources/README.md"
 cp network_follow.py "$bundle/Contents/Resources/network_follow.py"
+cp assets/MenuBarIcon.png "$bundle/Contents/Resources/MenuBarIcon.png"
 cp assets/MonitorSwitch.icns "$bundle/Contents/Resources/MonitorSwitch.icns"
 cat > "$bundle/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -20,8 +21,8 @@ cat > "$bundle/Contents/Info.plist" <<'PLIST'
 <key>CFBundleName</key><string>MonitorSwitch</string>
 <key>CFBundleDisplayName</key><string>MonitorSwitch</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.9.3</string>
-<key>CFBundleVersion</key><string>12</string>
+<key>CFBundleShortVersionString</key><string>0.9.4</string>
+<key>CFBundleVersion</key><string>13</string>
 <key>CFBundleIconFile</key><string>MonitorSwitch.icns</string>
 <key>NSLocalNetworkUsageDescription</key><string>Receive authenticated Easy-Switch device events on your local network to switch your display input.</string>
 <key>LSUIElement</key><true/>
