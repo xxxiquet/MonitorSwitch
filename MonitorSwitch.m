@@ -135,9 +135,13 @@ static void hidRemoved(void *context, IOReturn result, void *sender, IOHIDDevice
     [self status:self.observeOnly ? @"Diagnostic mode · monitor unchanged" : @"Easy-Switch enabled · waiting for device events"];
     self.timer = [NSTimer scheduledTimerWithTimeInterval:0.1 target:self selector:@selector(tick) userInfo:nil repeats:YES];
     [self startNetworkListener];
-    if (!config[@"keys"] || [NSProcessInfo.processInfo.arguments containsObject:@"--setup"]) {
+    if (!config[@"keys"] || !config[@"macChannel"] || [NSProcessInfo.processInfo.arguments containsObject:@"--setup"]) {
         dispatch_async(dispatch_get_main_queue(), ^{ [self settings:nil]; });
     }
+}
+- (BOOL)applicationShouldHandleReopen:(NSApplication *)sender hasVisibleWindows:(BOOL)visible {
+    if (!visible) [self settings:nil];
+    return YES;
 }
 - (void)rebuildMenu {
     NSMenu *menu = [[NSMenu alloc] initWithTitle:@"MonitorSwitch"];
