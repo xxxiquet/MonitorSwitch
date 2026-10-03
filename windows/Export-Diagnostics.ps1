@@ -12,7 +12,7 @@ try {
         if (Test-Path -LiteralPath $path) { Copy-Item -LiteralPath $path -Destination $temp }
     }
     $cfg = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'config.json') -Raw | ConvertFrom-Json
-    @('MonitorSwitch 0.9.2', ('Device: ' + $cfg.channel), ('PowerShell: ' + $PSVersionTable.PSVersion), ('Windows: ' + [Environment]::OSVersion.VersionString), ('Language mode: ' + $ExecutionContext.SessionState.LanguageMode), 'Configuration and pairing keys are excluded. Logs may contain local IP addresses and device identifiers.') | Set-Content -LiteralPath (Join-Path $temp 'summary.txt')
+    @('MonitorSwitch 0.9.3', ('Device: ' + $cfg.channel), ('PowerShell: ' + $PSVersionTable.PSVersion), ('Windows: ' + [Environment]::OSVersion.VersionString), ('Language mode: ' + $ExecutionContext.SessionState.LanguageMode), 'Configuration and pairing keys are excluded. Logs may contain local IP addresses and device identifiers.') | Set-Content -LiteralPath (Join-Path $temp 'summary.txt')
     Compress-Archive -Path (Join-Path $temp '*') -DestinationPath $dialog.FileName -Force
     [Windows.Forms.MessageBox]::Show('Diagnostics saved. Review the logs before sharing: they may contain local IP addresses and device identifiers.','MonitorSwitch') | Out-Null
 } finally { Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue; $dialog.Dispose() }

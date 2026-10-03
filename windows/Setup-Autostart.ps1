@@ -10,7 +10,7 @@ if ($Disable) {
 }
 $target = Join-Path $env:LOCALAPPDATA ('MonitorSwitch\Device' + $cfg.channel)
 New-Item -ItemType Directory -Path $target -Force | Out-Null
-foreach ($name in @('Configuration-UI.ps1','MonitorSwitch-Tray.ps1','MonitorSwitch-Windows.ps1','config.json','Setup-Autostart.ps1','Export-Diagnostics.ps1','README.md')) {
+foreach ($name in @('MonitorSwitch.ico','Configuration-UI.ps1','MonitorSwitch-Tray.ps1','MonitorSwitch-Windows.ps1','config.json','Setup-Autostart.ps1','Export-Diagnostics.ps1','README.md')) {
     $source = Join-Path $PSScriptRoot $name; $dest = Join-Path $target $name
     if ([IO.Path]::GetFullPath($source) -ne [IO.Path]::GetFullPath($dest)) { Copy-Item -LiteralPath $source -Destination $dest -Force }
 }
@@ -19,6 +19,7 @@ $link = $shell.CreateShortcut($linkPath)
 $link.TargetPath = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 $link.Arguments = '-NoLogo -NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + (Join-Path $target 'MonitorSwitch-Tray.ps1') + '"'
 $link.WorkingDirectory = $target; $link.WindowStyle = 7
+$link.IconLocation = (Join-Path $target 'MonitorSwitch.ico') + ',0'
 $link.Description = 'MonitorSwitch tray application for Device ' + $cfg.channel
 $link.Save()
 Write-Host 'Launch at sign-in enabled for this user.'

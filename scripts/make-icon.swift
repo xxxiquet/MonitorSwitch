@@ -44,3 +44,24 @@ for size in [16,32,64,128,256,512,1024] {
     }
     for name in names {try data.write(to:URL(fileURLWithPath:folder).appendingPathComponent(name))}
 }
+
+// Package the same PNG representations for Windows; never redraw a second icon.
+if CommandLine.arguments.count > 2 {
+    let sizes = [16, 32, 64, 128, 256]
+    let files = ["icon_16x16.png", "icon_32x32.png", "icon_32x32@2x.png", "icon_128x128.png", "icon_256x256.png"]
+    let payloads = try files.map { try Data(contentsOf: URL(fileURLWithPath: folder).appendingPathComponent($0)) }
+    var ico = Data()
+    func appendLE(_ value: Int, _ bytes: Int) {
+        for shift in 0..<bytes { ico.append(UInt8((value >> (shift * 8)) & 255)) }
+    }
+    appendLE(0,2); appendLE(1,2); appendLE(sizes.count,2)
+    var offset = 6 + sizes.count * 16
+    for i in 0..<sizes.count {
+        appendLE(sizes[i] % 256,1); appendLE(sizes[i] % 256,1)
+        appendLE(0,1); appendLE(0,1); appendLE(1,2); appendLE(32,2)
+        appendLE(payloads[i].count,4); appendLE(offset,4)
+        offset += payloads[i].count
+    }
+    for data in payloads { ico.append(data) }
+    try ico.write(to: URL(fileURLWithPath: CommandLine.arguments[2]))
+}

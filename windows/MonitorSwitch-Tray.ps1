@@ -11,28 +11,6 @@ $script:restartTray = $false
 $mutex = [Threading.Mutex]::new($false, ('Local\MonitorSwitch-Tray-' + $cfg.channel))
 try { $owner = $mutex.WaitOne(0) } catch [Threading.AbandonedMutexException] { $owner = $true }
 if (!$owner) { $mutex.Dispose(); exit }
-Add-Type -TypeDefinition @'
-using System;
-using System.Drawing;
-using System.Runtime.InteropServices;
-public static class TrayArtwork {
-    [DllImport("user32.dll")] static extern bool DestroyIcon(IntPtr icon);
-    public static Icon Create() {
-        using(var bitmap = new Bitmap(32,32)) using(var g = Graphics.FromImage(bitmap)) {
-            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            g.Clear(Color.Transparent);
-            using(var background = new SolidBrush(Color.Black)) g.FillEllipse(background,1,1,30,30);
-            using(var p = new Pen(Color.White,2)) {
-                g.DrawRectangle(p,7,8,18,12); g.DrawLine(p,16,20,16,24); g.DrawLine(p,11,24,21,24);
-                g.DrawLine(p,10,13,21,13); g.DrawLine(p,18,10,21,13); g.DrawLine(p,18,16,21,13);
-            }
-            IntPtr handle = bitmap.GetHicon();
-            try { using(var icon=Icon.FromHandle(handle)) return (Icon)icon.Clone(); }
-            finally { DestroyIcon(handle); }
-        }
-    }
-}
-'@ -ReferencedAssemblies System.Drawing
 $script:worker = $null
 function Start-Worker {
     if ($script:worker -and !$script:worker.HasExited) { return }
@@ -46,7 +24,7 @@ function Stop-Worker {
     $script:worker = $null
 }
 $tray = New-Object Windows.Forms.NotifyIcon
-$tray.Icon = [TrayArtwork]::Create()
+$tray.Icon = [Drawing.Icon]::new((Join-Path $PSScriptRoot 'MonitorSwitch.ico'),32,32)
 $tray.Text = 'MonitorSwitch - Device ' + $cfg.channel
 $menu = New-Object Windows.Forms.ContextMenuStrip
 $title = $menu.Items.Add('MonitorSwitch | Device ' + $cfg.channel); $title.Enabled = $false

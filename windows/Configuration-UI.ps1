@@ -18,6 +18,7 @@ function Convert-DeviceProfile($Profile) {
 }
 function Show-DeviceSetup([string]$ConfigPath) {
     $form = New-Object Windows.Forms.Form
+    $form.Icon = [Drawing.Icon]::new((Join-Path $PSScriptRoot 'MonitorSwitch.ico'))
     $form.Text = 'MonitorSwitch | Device setup'; $form.ClientSize = New-Object Drawing.Size(510,440)
     $form.StartPosition = 'CenterScreen'; $form.FormBorderStyle = 'FixedDialog'; $form.MaximizeBox = $false; $form.MinimizeBox = $false
     $controls = @{}
@@ -57,5 +58,5 @@ function Show-DeviceSetup([string]$ConfigPath) {
             $form.DialogResult='OK'; $form.Close()
         } catch { $errorLabel.Text=$_.Exception.Message }
     })
-    try { return ($form.ShowDialog() -eq 'OK') } finally { $form.Dispose() }
+    try { return ($form.ShowDialog() -eq 'OK') } finally { $form.Icon.Dispose(); $form.Dispose() }
 }

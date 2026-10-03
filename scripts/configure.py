@@ -19,6 +19,7 @@ def package(output, channel=None, config=None):
     with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as archive:
         for name in WINDOWS_FILES:
             archive.write(ROOT / 'windows' / name, f'{prefix}/{name}')
+        archive.write(ROOT / 'assets' / 'MonitorSwitch.ico', f'{prefix}/MonitorSwitch.ico')
         for notice in ('LICENSE', 'THIRD_PARTY_NOTICES.md'):
             archive.write(ROOT / notice, f'{prefix}/{notice}')
         if config:

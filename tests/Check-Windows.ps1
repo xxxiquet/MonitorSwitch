@@ -24,11 +24,8 @@ if ($env:OS -eq 'Windows_NT') {
     if (!$source) { throw 'Native helper source not found.' }
     Add-Type -TypeDefinition $source
     if ([MonitorSwitchReturnListener]::Authenticate('{}', [byte[]](1..32), 1000)) { throw 'Malformed command was accepted.' }
-    $tray = Get-Content -LiteralPath (Join-Path $root 'windows/MonitorSwitch-Tray.ps1') -Raw
-    $art = [regex]::Match($tray,"(?s)Add-Type -TypeDefinition @'\r?\n(.*?)\r?\n'@").Groups[1].Value
     Add-Type -AssemblyName System.Drawing
-    Add-Type -TypeDefinition $art -ReferencedAssemblies System.Drawing
-    $icon = [TrayArtwork]::Create()
+    $icon = [Drawing.Icon]::new((Join-Path $root 'assets/MonitorSwitch.ico'),32,32)
     if ($icon.Width -ne 32 -or $icon.Height -ne 32) { throw 'Invalid tray icon dimensions.' }
     $icon.Dispose()
 }
