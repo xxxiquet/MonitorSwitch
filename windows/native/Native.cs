@@ -184,7 +184,7 @@ public static class MonitorSwitchReturnListener {
     static readonly object gate=new object();
     static string episode="";
     static readonly object ddcGate=new object();
-    static string returnedEpisode="", monitorInstance="", diagnosticPath="";
+    static string returnedEpisode="", monitorInstance="";
     static bool fastEnabled;
     public static void EnableFastReturn(bool enabled) { fastEnabled=enabled; }
     public static void ReturnImmediately(string source) {
@@ -199,7 +199,7 @@ public static class MonitorSwitchReturnListener {
             if(result.EndsWith("Coordinator input command sent")) returnedEpisode=current;
             string line=DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")+" "+source+"; "+result+"; DDC duration="+clock.ElapsedMilliseconds+"ms";
             Console.WriteLine(line);
-            System.IO.File.AppendAllText(diagnosticPath,line+Environment.NewLine);
+            Store.Log(source+"; "+result+"; DDC duration="+clock.ElapsedMilliseconds+"ms");
         }
     }
     static System.Threading.Thread worker;
@@ -233,7 +233,7 @@ public static class MonitorSwitchReturnListener {
     }
     public static void Start(System.Net.Sockets.UdpClient udp,byte[] key,string macIP,string instance,string logFile) {
         if(running || (worker!=null && worker.IsAlive)) throw new InvalidOperationException("The previous return listener is still stopping.");
-        monitorInstance=instance; diagnosticPath=logFile;
+        monitorInstance=instance;
         udp.Client.ReceiveTimeout=100;
         running=true;
         worker=new System.Threading.Thread(delegate() {

@@ -72,11 +72,11 @@ Windows **0.10.0-test1** is an unsigned native test build. The previous PowerShe
 
 ## Windows tray menu
 
-- **Follow Easy-Switch** — start or stop the helper, with a running-process checkmark.
+- **Follow Easy-Switch** — enable or pause the connection worker, with a state checkmark.
 - **Launch at sign-in** — enable or disable current-user startup; the checkmark reflects the Startup shortcut.
 - **Setup device…** — import a profile or edit this computer’s settings.
 - **Diagnostics** — open logs or export a diagnostic ZIP without configuration or pairing keys.
-- **Quit MonitorSwitch** — stop the tray app and its child helper.
+- **Quit MonitorSwitch** — close the application and its connection worker.
 
 This is a user-session application, not a Windows service. It starts after sign-in when enabled. No scheduled task, registry startup entry or elevated installer is used. A per-user mutex prevents duplicate native instances. Windows uses one compiled C# / WinForms application with native HID/DDC APIs and .NET Framework 4.8. It does not launch PowerShell, change execution policy or install a service.
 

@@ -303,9 +303,10 @@ public sealed class TrayContext : ApplicationContext {
             if(engine!=null && !engine.Stop())throw new InvalidOperationException("Connection is still stopping. Try setup again in a moment.");
             try { using(var form=new SetupForm(profile)) {
                 if(form.ShowDialog()==DialogResult.OK) {
-                    bool wasStartup=Startup.Enabled(profile.channel);Profile next=form.Result; next.Save(Store.Config);
-                    if(wasStartup) {Startup.Enable(next);if(next.channel!=profile.channel)Startup.Disable(profile.channel);}
-                    profile=next;tray.Text="MonitorSwitch | Device "+profile.channel;menu.Items[0].Text=tray.Text;
+                    bool wasStartup=Startup.Enabled(profile.channel);int oldChannel=profile.channel;Profile next=form.Result; next.Save(Store.Config);
+                    profile=next;
+                    if(wasStartup) {Startup.Enable(next);if(next.channel!=oldChannel)Startup.Disable(oldChannel);}
+                    tray.Text="MonitorSwitch | Device "+profile.channel;menu.Items[0].Text=tray.Text;
                 }
             }
             } finally {if(wasRunning)Start();Refresh();}
