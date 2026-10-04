@@ -9,19 +9,16 @@ import shutil
 import zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-WINDOWS_FILES = ('Configuration-UI.ps1', 'Start.cmd', 'Configure.cmd', 'Configure.ps1', 'MonitorSwitch-Tray.ps1',
-                 'MonitorSwitch-Windows.ps1', 'Setup-Autostart.ps1',
-                 'Export-Diagnostics.ps1', 'Run-Diagnostic.cmd', 'README.md',
-                 'Enable-Autostart.cmd', 'Disable-Autostart.cmd', 'Stop-Helper.cmd', 'Stop-Helper.ps1')
-
-def package(output, channel=None, config=None):
+def package(output, channel=None, config=None, executable=None):
+    executable = pathlib.Path(executable) if executable else ROOT/'build/windows-native/MonitorSwitch.exe'
+    if not executable.is_file():
+        raise FileNotFoundError('Build windows/native/build.cmd on Windows before packaging.')
     prefix = f'MonitorSwitch-Device{channel}' if channel else 'MonitorSwitch-Windows'
     with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as archive:
-        for name in WINDOWS_FILES:
-            archive.write(ROOT / 'windows' / name, f'{prefix}/{name}')
-        archive.write(ROOT / 'assets' / 'MonitorSwitch.ico', f'{prefix}/MonitorSwitch.ico')
+        archive.write(executable, f'{prefix}/MonitorSwitch.exe')
+        archive.write(ROOT/'windows/README.md', f'{prefix}/README.md')
         for notice in ('LICENSE', 'THIRD_PARTY_NOTICES.md'):
-            archive.write(ROOT / notice, f'{prefix}/{notice}')
+            archive.write(ROOT/notice, f'{prefix}/{notice}')
         if config:
             archive.writestr(f'{prefix}/config.json', json.dumps(config, indent=2) + '\n')
     output.chmod(0o600 if config else 0o644)

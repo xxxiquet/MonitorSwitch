@@ -28,7 +28,7 @@ This release targets the configuration it was developed with:
 
 The setup form lets you choose device names, operating systems, a detected monitor and input codes. Windows monitor identification and the coordinator return-input code are also configurable. Hardware validation was performed with the devices above. The fast Bolt return notification is currently enabled only for Windows channel 3 → macOS channel 2; other assignments use confirmed connection events and may take longer. Other keyboards and monitors are not guaranteed to work.
 
-No administrator privileges are required for normal Windows operation or its per-user startup. Corporate PowerShell, HID or firewall policies may restrict operation; MonitorSwitch does not change or circumvent those policies. Allow local UDP traffic to the macOS coordinator on port **25347** if your network policy permits it. Pairing messages have timestamp and replay checks, so keep the system clocks synchronized.
+No administrator privileges are required for normal Windows operation or its per-user startup. Corporate application, HID or firewall policies may restrict operation; MonitorSwitch does not change or circumvent those policies. Allow local UDP traffic to the macOS coordinator on port **25347** if your network policy permits it. Pairing messages have timestamp and replay checks, so keep the system clocks synchronized.
 
 ## Build the macOS app
 
@@ -45,7 +45,7 @@ Output: `build/MonitorSwitch.app`. The build does **not** install configuration,
 1. Connect the monitor, enable DDC/CI and pair each physical keyboard channel with its computer.
 2. Open the macOS app. **Setup devices…** opens on first launch; it is also available in the menu. Assign exactly one row to **macOS** and the other rows to **Windows**. Select your connected monitor, its input for each device, its Windows monitor name and this Mac's LAN IPv4 address. Save the setup. The app creates private pairing keys automatically and preserves existing keys.
 3. Choose **Export Windows profiles…** and select a folder. Transfer each exported JSON profile privately to its matching Windows computer.
-4. On Windows, extract the public Windows archive and run **Start.cmd**. On first launch, the setup form opens. Click **Import profile…**, select that computer's JSON file and click **Save**. The tray icon appears. You can reopen the form through **Setup device…**, or launch **Configure.cmd** before starting the app.
+4. On Windows, extract the public Windows archive and run **MonitorSwitch.exe**. On first launch, the setup form opens. Click **Import profile…**, select that computer's JSON file and click **Save**. The tray icon appears. You can reopen the form through **Setup device…**.
 5. Grant **Input Monitoring** to the macOS app in System Settings → Privacy & Security if requested, then restart it. macOS may require authentication to grant that permission; Windows setup does not request administrator privileges.
 6. Test the physical buttons with all computers awake. If you change device numbers or monitor input mappings, export and import updated Windows profiles.
 
@@ -68,6 +68,8 @@ The device checkmark represents the last requested channel. A successful DDC wri
 
 For macOS login startup, add the same app bundle to System Settings → General → Login Items. Keep the installed app at a stable path. A rebuild changes an ad-hoc signature and may require re-enabling Input Monitoring.
 
+Windows **0.10.0-test1** is an unsigned native test build. The previous PowerShell version triggered a Kaspersky behavior warning; antivirus compatibility and physical switching for the replacement remain pending. See [Windows README](windows/README.md#antivirus-test-build).
+
 ## Windows tray menu
 
 - **Follow Easy-Switch** — start or stop the helper, with a running-process checkmark.
@@ -76,7 +78,7 @@ For macOS login startup, add the same app bundle to System Settings → General 
 - **Diagnostics** — open logs or export a diagnostic ZIP without configuration or pairing keys.
 - **Quit MonitorSwitch** — stop the tray app and its child helper.
 
-This is a user-session application, not a Windows service. It starts after sign-in when enabled. No scheduled task, registry startup entry or elevated installer is used. A per-device mutex prevents duplicate helpers. Tray, helper and startup management are written in Windows PowerShell 5.1 using .NET / WinForms and native Windows APIs; no additional runtime is installed.
+This is a user-session application, not a Windows service. It starts after sign-in when enabled. No scheduled task, registry startup entry or elevated installer is used. A per-user mutex prevents duplicate native instances. Windows uses one compiled C# / WinForms application with native HID/DDC APIs and .NET Framework 4.8. It does not launch PowerShell, change execution policy or install a service.
 
 ## Troubleshooting
 
@@ -90,15 +92,17 @@ This is a user-session application, not a Windows service. It starts after sign-
 
 **DDC writes fail:** check DDC/CI, the selected display UUID and input codes. Some docks, cables and inactive monitor inputs do not carry DDC commands. This release's Windows identification intentionally avoids changing unrelated displays.
 
-**Diagnostics:** macOS logs live in `~/Library/Logs/MonitorSwitch`; Windows logs live beside the running helper. Logs record service messages and hardware/network diagnostics, not typed text. They may contain local addresses and device identifiers: review before sharing. Never share pairing files.
+**Diagnostics:** macOS logs live in `~/Library/Logs/MonitorSwitch`; Windows logs live in `%LOCALAPPDATA%\MonitorSwitch\Native`. Logs record service messages and hardware/network diagnostics, not typed text. They may contain local addresses and device identifiers: review before sharing. Never share pairing files.
 
 ## Development and release packaging
 
 ```sh
 python3 -m unittest discover -s tests
 python3 -m py_compile network_follow.py scripts/configure.py
-python3 scripts/package.py
+python3 scripts/package.py  # after building the Windows executable
 ```
+
+On Windows, run `windows\native\build.cmd` to compile the executable using the .NET Framework C# compiler. CI also runs native UI, icon, authenticated input and cross-language packet checks.
 
 The public Windows ZIP is created in `build/release/`. The macOS app can be archived after building; paired configurations, historical experimental builds and diagnostics are excluded from public artifacts.
 

@@ -9,7 +9,6 @@ jobs:
         with:
           python-version: '3.11'
       - run: python -m unittest discover -s tests -v
-      - run: python scripts/package.py
   macos:
     runs-on: macos-14
     steps:
@@ -19,6 +18,22 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate Windows PowerShell and native components
-        shell: powershell
-        run: .\tests\Check-Windows.ps1
+      - name: Build native Windows application
+        shell: cmd
+        run: windows\native\build.cmd
+      - name: Test native UI and protocol
+        shell: cmd
+        run: |
+          start "" /wait build\windows-native\MonitorSwitch.exe --self-test build\windows-native\self-test-result.txt
+          if errorlevel 1 exit /b 1
+          type build\windows-native\self-test-result.txt
+          python tests/check_native_fixture.py build/windows-native/self-test-result.txt.packets.json
+      - name: Package executable
+        run: python scripts/package.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-native
+          path: |
+            build/windows-native/MonitorSwitch.exe
+            build/windows-native/self-test-result.txt
+            build/release/MonitorSwitch-Windows-0.10.0-test1.zip

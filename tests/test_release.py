@@ -51,17 +51,18 @@ class AuthenticatedEvents(unittest.TestCase):
 class ReleaseContents(unittest.TestCase):
     def test_public_package_contains_tray_and_docs_but_no_config(self):
         with tempfile.TemporaryDirectory() as tmp:
-            path=Path(tmp)/'public.zip';setup.package(path)
+            path=Path(tmp)/'public.zip';exe=Path(tmp)/'fixture.exe';exe.write_bytes(b'MZ-package-test-fixture');setup.package(path,executable=exe)
             with zipfile.ZipFile(path) as archive:
                 names=archive.namelist()
-                self.assertTrue(any(n.endswith('/MonitorSwitch-Tray.ps1') for n in names))
+                self.assertTrue(any(n.endswith('/MonitorSwitch.exe') for n in names))
                 self.assertTrue(any(n.endswith('/README.md') for n in names))
-                self.assertTrue(any(n.endswith('/Configuration-UI.ps1') for n in names))
+                self.assertFalse(any(n.endswith(('.ps1','.cmd','.vbs')) for n in names))
                 self.assertFalse(any(n.endswith(('.log','config.json')) for n in names))
     def test_private_packages_use_the_given_device_key_only(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/'device.zip';config={'channel':1,'key':'11'*32}
-            setup.package(path,1,config)
+            exe=Path(tmp)/'fixture.exe';exe.write_bytes(b'MZ-package-test-fixture')
+            setup.package(path,1,config,executable=exe)
             with zipfile.ZipFile(path) as archive:
                 self.assertEqual(json.loads(archive.read('MonitorSwitch-Device1/config.json')),config)
 
