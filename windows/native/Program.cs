@@ -24,6 +24,7 @@ public sealed class Profile {
     public string deviceType = "Windows";
     public int channel = 1, macChannel = 2, port = 25347, returnInput = 16;
     public string macIP = "", key = "", monitorModel = "G274QPF";
+    public int[] inputs = new[]{17,16,18};
     public void Validate() {
         IPAddress ip;
         if (deviceType != "Windows") throw new ArgumentException("Configure macOS devices in the macOS app.");
@@ -34,6 +35,8 @@ public sealed class Profile {
         if (!Regex.IsMatch(key ?? "", "\\A[a-fA-F0-9]{64}\\z")) throw new ArgumentException("Import the private Windows profile exported by the Mac app.");
         if (port < 1 || port > 65535 || returnInput < 1 || returnInput > 255 || String.IsNullOrWhiteSpace(monitorModel))
             throw new ArgumentException("Enter a monitor name, a valid port and an input code from 1 to 255.");
+        if(inputs==null || inputs.Length!=3 || inputs.Any(v=>v<1 || v>255))throw new ArgumentException("The profile must contain three input codes from 1 to 255.");
+        inputs[macChannel-1]=returnInput;
         macIP = ip.ToString(); key = key.ToLowerInvariant(); monitorModel = monitorModel.Trim();
     }
     public static Profile Read(string path) {
@@ -53,7 +56,7 @@ public sealed class Profile {
 }
 
 public static class Store {
-    public const string Version = "0.10.0-test1";
+    public const string Version = "0.10.0-test2";
     public static readonly string Folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonitorSwitch", "Native");
     public static readonly string Config = Path.Combine(Folder, "config.json");
     public static readonly string Diagnostic = Path.Combine(Folder, "diagnostic.log");
@@ -154,7 +157,7 @@ public sealed class Engine : IDisposable {
         try {
             profile.Validate(); udp = new UdpClient(0);
             var endpoint = new IPEndPoint(IPAddress.Parse(profile.macIP),profile.port);
-            MonitorSwitchDdc.ReturnInput=(uint)profile.returnInput; MonitorSwitchDdc.MonitorModel=profile.monitorModel;
+            MonitorSwitchDdc.ReturnInput=(uint)profile.returnInput; MonitorSwitchReturnListener.Inputs=profile.inputs.Select(v=>(uint)v).ToArray(); MonitorSwitchDdc.MonitorModel=profile.monitorModel;
             string instance = MonitorIdentity();
             string episode = Guid.NewGuid().ToString("N");
             MonitorSwitchReturnListener.SetEpisode(episode);
@@ -366,12 +369,24 @@ public static class Program {
             if(!MonitorSwitchReturnListener.Authenticate(packet,key,now))throw new Exception("Valid signed input rejected");
             if(MonitorSwitchReturnListener.Authenticate(packet,key,now))throw new Exception("Replayed input accepted");
             MonitorSwitchReturnListener.SetEpisode(episode);if(MonitorSwitchReturnListener.Authenticate(packet,key,now+60))throw new Exception("Stale input accepted");
+            MonitorSwitchReturnListener.Inputs=new uint[]{17,16,18};
+            foreach(int target in new[]{1,3}) {
+                MonitorSwitchReturnListener.SetEpisode(episode);
+                int code=target==1?17:18;id=Guid.NewGuid().ToString("N");
+                canonical="input|3|"+target+"|"+code+"|"+id+"|1000|"+episode;
+                using(var h=new HMACSHA256(key))digest=BitConverter.ToString(h.ComputeHash(Encoding.UTF8.GetBytes(canonical))).Replace("-","").ToLowerInvariant();
+                packet=new JavaScriptSerializer().Serialize(new Dictionary<string,object>{{"v",3},{"target",target},{"input",code},{"id",id},{"time",now},{"episode",episode},{"mac",digest}});
+                uint verified;
+                if(!MonitorSwitchReturnListener.TryAuthenticate(packet,key,now,out verified) || verified!=code)throw new Exception("Windows target input rejected");
+                MonitorSwitchReturnListener.SetEpisode(episode);
+                if(MonitorSwitchReturnListener.TryAuthenticate(packet.Replace("\"input\":"+code,"\"input\":99"),key,now,out verified))throw new Exception("Unconfigured/tampered input accepted");
+            }
             byte[] ready=Store.Packet(profile,episode,true,false,key);var readyObject=new JavaScriptSerializer().Deserialize<Dictionary<string,object>>(Encoding.UTF8.GetString(ready));if((int)readyObject["v"]!=2 || readyObject.ContainsKey("active"))throw new Exception("Readiness format changed");
             string temp=Path.Combine(Path.GetTempPath(),"MonitorSwitch-test-"+Guid.NewGuid().ToString("N"));
             try {profile.Save(Path.Combine(temp,"config.json"));profile.Save(Path.Combine(temp,"config.json"));if(Profile.Read(Path.Combine(temp,"config.json")).key!=profile.key)throw new Exception("Profile persistence failed");}finally{if(Directory.Exists(temp))Directory.Delete(temp,true);}
             byte[] active=Store.Packet(profile,episode,false,true,key),inactive=Store.Packet(profile,episode,false,false,key);
             File.WriteAllText(report+".packets.json",new JavaScriptSerializer().Serialize(new Dictionary<string,object>{{"key",profile.key},{"packets",new[]{Encoding.UTF8.GetString(ready),Encoding.UTF8.GetString(active),Encoding.UTF8.GetString(inactive)}}}));
-            File.WriteAllText(report,"PASS: profile validation, setup form, embedded icon, exact Bolt notification, signed DDC input, replay/stale rejection, readiness packet.\n");return 0;
+            File.WriteAllText(report,"PASS: profile validation, setup form, embedded icon, exact Bolt notification, signed DDC input, replay/stale rejection, Windows targets 1/3, readiness packet.\n");return 0;
         }catch(Exception e){File.WriteAllText(report,"FAIL: "+e+"\n");return 1;}
     }
 }

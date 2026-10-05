@@ -36,4 +36,4 @@ jobs:
           path: |
             build/windows-native/MonitorSwitch.exe
             build/windows-native/self-test-result.txt
-            build/release/MonitorSwitch-Windows-0.10.0-test1.zip
+            build/release/MonitorSwitch-Windows-0.10.0-test2.zip

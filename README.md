@@ -14,7 +14,7 @@ MonitorSwitch follows the **physical Logitech Easy-Switch buttons** and changes 
 
 The keyboard's own Easy-Switch action controls the keyboard connection. MonitorSwitch follows that action; it does not re-pair devices or switch your mouse. If your mouse already follows the keyboard through Logitech’s own feature, it continues to do so independently.
 
-Windows helpers identify the keyboard and announce confirmed device changes using authenticated UDP messages. The macOS coordinator controls the monitor through `m1ddc`. A Windows helper can send the return-input DDC command over HDMI when the monitor no longer accepts commands on the inactive USB-C connection. A confirmed Bolt ChangeHost notification provides the fast return path on Device 3. A disconnect alone is never treated as a destination selection.
+Windows helpers identify the keyboard and announce confirmed device changes using authenticated UDP messages. The macOS coordinator controls the monitor through `m1ddc`. The coordinator sends authenticated target-input commands to the previous Windows device and the destination Windows device. The active HDMI connection can therefore switch the monitor directly between Windows devices when inactive USB-C no longer accepts DDC commands. A confirmed Bolt ChangeHost notification provides the fast return path on Device 3. A disconnect alone is never treated as a destination selection.
 
 ## Compatibility
 
@@ -68,7 +68,7 @@ The device checkmark represents the last requested channel. A successful DDC wri
 
 For macOS login startup, add the same app bundle to System Settings → General → Login Items. Keep the installed app at a stable path. A rebuild changes an ad-hoc signature and may require re-enabling Input Monitoring.
 
-Windows **0.10.0-test1** is an unsigned native test build. The previous PowerShell version triggered a Kaspersky behavior warning; antivirus compatibility and physical switching for the replacement remain pending. See [Windows README](windows/README.md#antivirus-test-build).
+Windows **0.10.0-test2** is an unsigned native test build. The previous PowerShell version triggered a Kaspersky behavior warning; antivirus compatibility and physical switching for the replacement remain pending. See [Windows README](windows/README.md#antivirus-test-build).
 
 ## Windows tray menu
 

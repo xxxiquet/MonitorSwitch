@@ -13,6 +13,7 @@ import socket
 import subprocess
 import threading
 import time
+import uuid
 
 ROOT = pathlib.Path(__file__).resolve().parent
 LOG = pathlib.Path.home() / 'Library/Logs/MonitorSwitch/network.log'
@@ -54,6 +55,21 @@ def decode_packet(raw, keys, now, seen):
         return None
 
 
+def input_request(host, target, input_code, episode, keys, now=None):
+    request = {'v': 3, 'target': target, 'input': input_code,
+               'id': uuid.uuid4().hex, 'time': int(time.time() if now is None else now), 'episode': episode}
+    canonical = f"input|3|{target}|{input_code}|{request['id']}|{request['time']}|{episode}"
+    request['mac'] = hmac.new(keys[host], canonical.encode(), hashlib.sha256).hexdigest()
+    return json.dumps(request).encode()
+
+
+def command_hosts(previous, target, peers, episodes):
+    # Source HDMI is normally active. Destination is a fallback when the
+    # monitor already changed or the relay restarted with no source history.
+    return tuple(dict.fromkeys(host for host in (previous, target)
+                               if host in peers and episodes.get(host)))
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=pathlib.Path, default=ROOT / 'network-config.json')
@@ -65,6 +81,10 @@ def main():
         parser.error('--live and --emit-events cannot be combined')
     config = json.loads(args.config.read_text())
     return_input = args.return_input
+    raw_inputs = config.get("inputs", [17, 16, 18])
+    if not isinstance(raw_inputs, list) or len(raw_inputs) != 3 or any(type(v) is not int or not 1 <= v <= 255 for v in raw_inputs):
+        parser.error("inputs must contain three monitor input codes")
+    inputs = dict(enumerate(raw_inputs, 1))
     if not 1 <= return_input <= 255:
         parser.error('--return-input must be between 1 and 255')
     mac_channel = config.get('macChannel', 2)
@@ -96,6 +116,15 @@ def main():
             mac_connected = False
         elif f'Keyboard on channel {mac_channel} ·' in line:
             mac_connected = True
+
+    def request_target(host, target):
+        episode = last_episodes.get(host)
+        if not args.emit_events or not episode or host not in peers:
+            return
+        encoded = input_request(host, target, inputs[target], episode, keys)
+        for _ in range(3):
+            sock.sendto(encoded, peers[host])
+        log(f'Request channel {target} input {inputs[target]} through device channel {host}')
 
     def return_to_mac(host):
         episode = last_episodes.get(host)
@@ -161,6 +190,9 @@ def main():
                         hosts = (last_channel,) if last_channel in keys else tuple(ready_hosts)
                         for host in hosts:
                             return_to_mac(host)
+                    if channel in keys and args.emit_events:
+                        for host in command_hosts(last_channel, channel, peers, last_episodes):
+                            request_target(host, channel)
                     for ch in states:
                         if ch != channel and states[ch] is not None:
                             retired.add(states[ch])
@@ -171,12 +203,12 @@ def main():
                             print(f'MONITORSWITCH_CHANNEL:{channel}', flush=True)
                     elif args.live:
                         try:
-                            result = subprocess.run([str(DDC), 'display', display_uuid, 'set', 'input', str(INPUTS[channel])], capture_output=True, text=True, timeout=5)
-                            log(f"channel={channel} input={INPUTS[channel]}: {'command sent' if result.returncode == 0 else 'DDC error'}")
+                            result = subprocess.run([str(DDC), 'display', display_uuid, 'set', 'input', str(inputs[channel])], capture_output=True, text=True, timeout=5)
+                            log(f"channel={channel} input={inputs[channel]}: {'command sent' if result.returncode == 0 else 'DDC error'}")
                         except (OSError, subprocess.TimeoutExpired) as e:
                             log(f'DDC failed: {e}')
                     else:
-                        log(f'TEST: channel={channel} input={INPUTS[channel]}, monitor unchanged')
+                        log(f'TEST: channel={channel} input={inputs[channel]}, monitor unchanged')
                 if len(seen) > 256:
                     seen = {k: t for k, t in seen.items() if time.time() - t < 120}
         finally:

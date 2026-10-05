@@ -535,7 +535,7 @@ static void hidRemoved(void *context, IOReturn result, void *sender, IOHIDDevice
     NSInteger local=[config[@"macChannel"] integerValue] ?: 2;
     for(NSInteger channel=1;channel<=3;channel++) {
         if(channel==local)continue;
-        NSDictionary *profile=@{@"deviceType":@"Windows",@"channel":@(channel),@"macChannel":@(local),@"macIP":config[@"macIP"],@"port":config[@"port"],@"key":config[@"keys"][[ @(channel) stringValue]],@"returnInput":self.inputs[local-1],@"monitorModel":config[@"monitorModel"] ?: @"G274QPF"};
+        NSDictionary *profile=@{@"deviceType":@"Windows",@"channel":@(channel),@"macChannel":@(local),@"macIP":config[@"macIP"],@"port":config[@"port"],@"key":config[@"keys"][[ @(channel) stringValue]],@"returnInput":self.inputs[local-1],@"inputs":self.inputs,@"monitorModel":config[@"monitorModel"] ?: @"G274QPF"};
         NSURL *url=[panel.URL URLByAppendingPathComponent:[NSString stringWithFormat:@"MonitorSwitch-Device%ld-%@.json",channel,NSUUID.UUID.UUIDString]];
         NSError *error=nil;NSData *data=[NSJSONSerialization dataWithJSONObject:profile options:NSJSONWritingPrettyPrinted error:&error];
         if(![data writeToURL:url options:NSDataWritingAtomic error:&error]){[self status:@"Profile export failed"];return;}

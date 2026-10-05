@@ -48,6 +48,23 @@ class AuthenticatedEvents(unittest.TestCase):
         for raw in [b'not json',b'[]',b'{}',b'x'*1025]:
             self.assertIsNone(relay.decode_packet(raw,self.keys,1000,{}))
 
+class WindowsInputRouting(unittest.TestCase):
+    def test_both_windows_directions_use_source_hdmi(self):
+        peers={1:('192.0.2.1',1001),3:('192.0.2.3',1003)}
+        episodes={1:'11'*16,3:'33'*16}
+        self.assertEqual(relay.command_hosts(1,3,peers,episodes),(1,3))
+        self.assertEqual(relay.command_hosts(3,1,peers,episodes),(3,1))
+        self.assertEqual(relay.command_hosts(2,3,peers,episodes),(3,))
+        self.assertEqual(relay.command_hosts(3,1,peers,{1:episodes[1]}),(1,))
+    def test_target_code_and_source_pairing_key_are_signed(self):
+        keys={1:bytes.fromhex('aa'*32),3:bytes.fromhex('bb'*32)}
+        for source,target,code in [(1,3,18),(3,1,17)]:
+            request=json.loads(relay.input_request(source,target,code,'ab'*16,keys,now=1000))
+            canonical=f"input|3|{target}|{code}|{request['id']}|1000|{request['episode']}"
+            self.assertEqual(request['mac'],hmac.new(keys[source],canonical.encode(),hashlib.sha256).hexdigest())
+            self.assertNotEqual(request['mac'],hmac.new(keys[target],canonical.encode(),hashlib.sha256).hexdigest())
+
+
 class ReleaseContents(unittest.TestCase):
     def test_public_package_contains_tray_and_docs_but_no_config(self):
         with tempfile.TemporaryDirectory() as tmp:

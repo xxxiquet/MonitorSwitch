@@ -132,9 +132,10 @@ public static class MonitorSwitchDdc {
     }
     public static uint ReturnInput = 16;
     public static string MonitorModel = "G274QPF";
-    public static string Probe(string instance) { return Inspect(instance,false); }
-    public static string ReturnToMac(string instance) { return Inspect(instance,true); }
-    static string Inspect(string instance,bool write) {
+    public static string Probe(string instance) { return Inspect(instance,false,ReturnInput); }
+    public static string ReturnToMac(string instance) { return SwitchInput(instance,ReturnInput); }
+    public static string SwitchInput(string instance,uint input) {return Inspect(instance,true,input);}
+    static string Inspect(string instance,bool write,uint input) {
         bool found=false, sent=false;
         var report=new System.Text.StringBuilder();
         EnumDisplayMonitors(IntPtr.Zero,IntPtr.Zero,delegate(IntPtr monitor,IntPtr dc,IntPtr rect,IntPtr data) {
@@ -166,10 +167,10 @@ public static class MonitorSwitchDdc {
                         else report.Append("capabilities failed, error="+Marshal.GetLastWin32Error()+"; ");
                     } else report.Append("capabilities length unavailable; ");
                 } else {
-                    bool accepted=SetVCPFeature(p.Handle,0x60,ReturnInput);
+                    bool accepted=SetVCPFeature(p.Handle,0x60,input);
                     int error=Marshal.GetLastWin32Error();
                     if(accepted) sent=true;
-                    report.Append("SetVCP 0x60="+ReturnInput+" accepted="+accepted+", error="+(accepted?0:error)+"; ");
+                    report.Append("SetVCP 0x60="+input+" accepted="+accepted+", error="+(accepted?0:error)+"; ");
                     report.Append("image not verified; ");
                 }
             } } finally { DestroyPhysicalMonitors(count,physical); }
@@ -187,16 +188,19 @@ public static class MonitorSwitchReturnListener {
     static string returnedEpisode="", monitorInstance="";
     static bool fastEnabled;
     public static void EnableFastReturn(bool enabled) { fastEnabled=enabled; }
-    public static void ReturnImmediately(string source) {
+    public static uint[] Inputs=new uint[]{17,16,18};
+    public static void ReturnImmediately(string source) {SwitchImmediately(source,MonitorSwitchDdc.ReturnInput);}
+    public static void SwitchImmediately(string source,uint input) {
         if(source=="Bolt channel-2 notification" && !fastEnabled) return;
         string current; lock(gate) current=episode;
         if(current.Length==0) return;
         lock(ddcGate) {
-            if(current==returnedEpisode) return;
+            string requestKey=current+"|"+input;
+            if(requestKey==returnedEpisode) return;
             var clock=System.Diagnostics.Stopwatch.StartNew();
-            string result=MonitorSwitchDdc.ReturnToMac(monitorInstance);
+            string result=MonitorSwitchDdc.SwitchInput(monitorInstance,input);
             clock.Stop();
-            if(result.EndsWith("Coordinator input command sent")) returnedEpisode=current;
+            if(result.EndsWith("Coordinator input command sent")) returnedEpisode=requestKey;
             string line=DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")+" "+source+"; "+result+"; DDC duration="+clock.ElapsedMilliseconds+"ms";
             Console.WriteLine(line);
             Store.Log(source+"; "+result+"; DDC duration="+clock.ElapsedMilliseconds+"ms");
@@ -209,17 +213,25 @@ public static class MonitorSwitchReturnListener {
         var matches=System.Text.RegularExpressions.Regex.Matches(json,"\""+name+"\"\\s*:\\s*"+pattern);
         return matches.Count==1 ? matches[0].Groups[1].Value : "";
     }
-    public static bool Authenticate(string json,byte[] key,long now) {
+    public static bool Authenticate(string json,byte[] key,long now) {uint input;return TryAuthenticate(json,key,now,out input);}
+    public static bool TryAuthenticate(string json,byte[] key,long now,out uint verifiedInput) {
+        verifiedInput=0;
         if(json.Length>1024) return false;
-        string version=Field(json,"v","(1)(?=\\s*[,}])");
+        string version=Field(json,"v","([13])(?=\\s*[,}])");
         string input=Field(json,"input","([0-9]{1,3})(?=\\s*[,}])");
         string id=Field(json,"id","\"([a-f0-9]{32})\"");
         string timestamp=Field(json,"time","([0-9]{1,12})(?=\\s*[,}])");
         string packetEpisode=Field(json,"episode","\"([a-f0-9]{32})\"");
         string mac=Field(json,"mac","\"([a-f0-9]{64})\"");
+        string target=Field(json,"target","([123])(?=\\s*[,}])");
+        uint code;int targetChannel;
+        if(!UInt32.TryParse(input,out code))return false;
+        if(version=="1") {if(code!=MonitorSwitchDdc.ReturnInput)return false;}
+        else if(version=="3") {if(!Int32.TryParse(target,out targetChannel) || Inputs==null || Inputs.Length!=3 || code!=Inputs[targetChannel-1])return false;}
+        else return false;
         long time;
-        if(version!="1" || input!=MonitorSwitchDdc.ReturnInput.ToString() || id.Length!=32 || mac.Length!=64 || !Int64.TryParse(timestamp,out time) || Math.Abs(now-time)>15) return false;
-        string canonical="input|1|"+input+"|"+id+"|"+timestamp+"|"+packetEpisode;
+        if(id.Length!=32 || mac.Length!=64 || !Int64.TryParse(timestamp,out time) || Math.Abs(now-time)>15) return false;
+        string canonical="input|"+version+"|"+(version=="3"?target+"|":"")+input+"|"+id+"|"+timestamp+"|"+packetEpisode;
         byte[] digest;
         using(var h=new System.Security.Cryptography.HMACSHA256(key)) digest=h.ComputeHash(System.Text.Encoding.UTF8.GetBytes(canonical));
         string expected=BitConverter.ToString(digest).Replace("-","").ToLowerInvariant();
@@ -228,7 +240,7 @@ public static class MonitorSwitchReturnListener {
         lock(gate) {
             if(episode.Length==0 || packetEpisode!=episode || seen.Contains(id)) return false;
             if(seen.Count>=256) return false;
-            seen.Add(id); return true;
+            seen.Add(id); verifiedInput=code;return true;
         }
     }
     public static void Start(System.Net.Sockets.UdpClient udp,byte[] key,string macIP,string instance,string logFile) {
@@ -243,8 +255,9 @@ public static class MonitorSwitchReturnListener {
                     byte[] bytes=udp.Receive(ref sender);
                     if(sender.Address.ToString()!=macIP || bytes.Length>1024) continue;
                     string json=System.Text.Encoding.UTF8.GetString(bytes);
-                    if(!Authenticate(json,key,DateTimeOffset.UtcNow.ToUnixTimeSeconds())) continue;
-                    ReturnImmediately("Mac confirmation");
+                    uint input;
+                    if(!TryAuthenticate(json,key,DateTimeOffset.UtcNow.ToUnixTimeSeconds(),out input)) continue;
+                    SwitchImmediately("Coordinator confirmed input "+input,input);
                 } catch(System.Net.Sockets.SocketException) { }
                 catch(ObjectDisposedException) { break; }
                 catch(Exception e) {

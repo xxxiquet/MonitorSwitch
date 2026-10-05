@@ -14,6 +14,8 @@ The setup form includes system type, local device number, macOS coordinator numb
 
 All computers must be awake and on the same reachable LAN. Enable DDC/CI on the monitor and keep the macOS app running. Corporate policies can restrict LAN/HID access; this app does not change them. Private profiles contain pairing keys: never publish them.
 
+Version 0.10.0-test2 adds authenticated target-input commands for direct Windows-to-Windows transitions. Update both Windows companions and the Mac relay. Private profiles include the three monitor input codes; re-export profiles after changing mappings. The fast Bolt path for Device 3 → Mac remains separate.
+
 ## Tray menu
 
 | Item | Behavior |
@@ -45,4 +47,4 @@ Requires Windows with .NET Framework 4.8 and an interactive user session. The ex
 
 ## Antivirus test build
 
-Version **0.10.0-test1** replaces the PowerShell runtime with a compiled application. Kaspersky Endpoint Security reported `PDM:Trojan.Win32.Generic` against the previous `MonitorSwitch-Tray.ps1`. The cause and whether that was a false positive are not established. This unsigned test executable has not yet been validated with Kaspersky or the physical Windows devices. Keep antivirus enabled during testing; do not add exclusions or bypass organizational restrictions. If a warning occurs, quit the app and record the detection name, file path and diagnostic logs. Private profiles and configured archives must not be uploaded to scanning services.
+Version **0.10.0-test2** replaces the PowerShell runtime with a compiled application. Kaspersky Endpoint Security reported `PDM:Trojan.Win32.Generic` against the previous `MonitorSwitch-Tray.ps1`. The cause and whether that was a false positive are not established. This unsigned test executable has not yet been validated with Kaspersky or the physical Windows devices. Keep antivirus enabled during testing; do not add exclusions or bypass organizational restrictions. If a warning occurs, quit the app and record the detection name, file path and diagnostic logs. Private profiles and configured archives must not be uploaded to scanning services.
