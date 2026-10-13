@@ -442,6 +442,13 @@ public static class Program {
                 MonitorSwitchReturnListener.SetEpisode(episode);uint ignored;
                 if(MonitorSwitchReturnListener.TryAuthenticate(malformed,key,now,out ignored))throw new Exception("Malformed input accepted");
             }
+            MonitorSwitchReturnListener.SetEpisode(episode);
+            for(int index=0;index<260;index++) {
+                long stamp=1000+index*32;id=Guid.NewGuid().ToString("N");canonical="input|1|17|"+id+"|"+stamp+"|"+episode;
+                using(var h=new HMACSHA256(key))digest=BitConverter.ToString(h.ComputeHash(Encoding.UTF8.GetBytes(canonical))).Replace("-","").ToLowerInvariant();
+                packet=new JavaScriptSerializer().Serialize(new Dictionary<string,object>{{"v",1},{"input",17},{"id",id},{"time",stamp},{"episode",episode},{"mac",digest}});
+                if(!MonitorSwitchReturnListener.Authenticate(packet,key,stamp))throw new Exception("Expired replay entries blocked a long-running session");
+            }
             byte[] ready=Store.Packet(profile,episode,true,false,key);var readyObject=new JavaScriptSerializer().Deserialize<Dictionary<string,object>>(Encoding.UTF8.GetString(ready));if((int)readyObject["v"]!=2 || readyObject.ContainsKey("active"))throw new Exception("Readiness format changed");
             string temp=Path.Combine(Path.GetTempPath(),"MonitorSwitch-test-"+Guid.NewGuid().ToString("N"));
             try {profile.Save(Path.Combine(temp,"config.json"));profile.Save(Path.Combine(temp,"config.json"));if(File.ReadAllText(Path.Combine(temp,"config.json")).Contains(profile.key))throw new Exception("Plaintext pairing key stored");if(Profile.Read(Path.Combine(temp,"config.json")).key!=profile.key)throw new Exception("Profile persistence failed");}finally{if(Directory.Exists(temp))Directory.Delete(temp,true);}

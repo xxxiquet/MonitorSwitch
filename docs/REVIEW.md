@@ -6,6 +6,7 @@ MonitorSwitch is useful for its tested Logitech/MSI setup, but remains an experi
 
 - Windows setup now retains imported monitor input mappings for every coordinator channel (first fixed in test3).
 - Windows target-input messages use structured JSON validation with exact fields and types instead of regular-expression extraction. Authenticated input codes must match the configured target; timestamps, session episodes and replay IDs are checked.
+- Windows replay IDs expire after their timestamp validity window instead of permanently exhausting a session after 256 unique commands.
 - Retired relay episodes expire rather than accumulating for the entire app session. Late packets from a retired episode cannot replace the current peer/session used to send commands.
 - Saved Windows pairing keys use DPAPI for the current account, with plaintext legacy profile import retained.
 - Pairing is on demand, bounded in lifetime and response size, authenticated and encrypted. Old helper callbacks cannot update a replacement pairing session.

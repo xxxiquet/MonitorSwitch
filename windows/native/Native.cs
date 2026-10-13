@@ -207,7 +207,7 @@ public static class MonitorSwitchReturnListener {
         }
     }
     static System.Threading.Thread worker;
-    static readonly HashSet<string> seen=new HashSet<string>();
+    static readonly Dictionary<string,long> seen=new Dictionary<string,long>();
     public static void SetEpisode(string value) { lock(gate) { episode=value; seen.Clear(); } }
     public static bool Authenticate(string json,byte[] key,long now) {uint input;return TryAuthenticate(json,key,now,out input);}
     public static bool TryAuthenticate(string json,byte[] key,long now,out uint verifiedInput) {
@@ -234,9 +234,11 @@ public static class MonitorSwitchReturnListener {
         int difference=0; for(int i=0;i<64;i++) difference |= expected[i]^mac[i];
         if(difference!=0) return false;
         lock(gate) {
-            if(episode.Length==0 || packetEpisode!=episode || seen.Contains(id)) return false;
+            if(episode.Length==0 || packetEpisode!=episode || seen.ContainsKey(id)) return false;
+            var expired=new List<string>();foreach(var item in seen)if(item.Value<now-15)expired.Add(item.Key);
+            foreach(string old in expired)seen.Remove(old);
             if(seen.Count>=256) return false;
-            seen.Add(id); verifiedInput=code;return true;
+            seen.Add(id,time); verifiedInput=code;return true;
         }
     }
     public static void Start(System.Net.Sockets.UdpClient udp,byte[] key,string macIP,string instance,string logFile) {
