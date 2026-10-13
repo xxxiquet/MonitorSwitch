@@ -56,7 +56,7 @@ public sealed class Profile {
 }
 
 public static class Store {
-    public const string Version = "0.10.0-test2";
+    public const string Version = "0.10.0-test3";
     public static readonly string Folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonitorSwitch", "Native");
     public static readonly string Config = Path.Combine(Folder, "config.json");
     public static readonly string Diagnostic = Path.Combine(Folder, "diagnostic.log");
@@ -213,6 +213,7 @@ public sealed class SetupForm : Form {
     readonly Dictionary<string,Control> fields = new Dictionary<string,Control>();
     readonly Label error = new Label();
     public Profile Result;
+    int[] inputMap;
     public SetupForm(Profile profile) {
         Text="MonitorSwitch | Device setup"; Icon=Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         ClientSize=new Size(510,450); StartPosition=FormStartPosition.CenterScreen; FormBorderStyle=FormBorderStyle.FixedDialog; MaximizeBox=false; MinimizeBox=false;
@@ -232,23 +233,26 @@ public sealed class SetupForm : Form {
         Fill(profile??new Profile());
     }
     protected override void Dispose(bool disposing) {if(disposing && Icon!=null){Icon.Dispose();Icon=null;}base.Dispose(disposing);}
-    void Fill(Profile value) { foreach(var pair in fields) pair.Value.Text=Convert.ToString(typeof(Profile).GetField(pair.Key).GetValue(value)); }
+    void Fill(Profile value) { inputMap=(int[])value.inputs.Clone(); foreach(var pair in fields) pair.Value.Text=Convert.ToString(typeof(Profile).GetField(pair.Key).GetValue(value)); }
     void Import(object sender,EventArgs args) {
         using(var dialog=new OpenFileDialog {Filter="MonitorSwitch profile (*.json)|*.json"}) {
             if(dialog.ShowDialog(this)!=DialogResult.OK)return;
             try { Fill(Profile.Read(dialog.FileName));error.Text=""; } catch(Exception e) {error.Text=e.Message;}
         }
     }
-    void Save(object sender,EventArgs args) {
-        try {
-            var profile=new Profile();
-            foreach(var pair in fields) {
-                FieldInfo field=typeof(Profile).GetField(pair.Key);
-                field.SetValue(profile,field.FieldType==typeof(int)?(object)Int32.Parse(pair.Value.Text):pair.Value.Text);
-            }
-            profile.Validate(); Result=profile; DialogResult=DialogResult.OK; Close();
-        } catch(Exception e) {error.Text=e.Message;}
+    internal Profile CollectProfile() {
+        var profile=new Profile {inputs=(int[])inputMap.Clone()};
+        foreach(var pair in fields) {
+            FieldInfo field=typeof(Profile).GetField(pair.Key);
+            field.SetValue(profile,field.FieldType==typeof(int)?(object)Int32.Parse(pair.Value.Text):pair.Value.Text);
+        }
+        profile.Validate();return profile;
     }
+    void Save(object sender,EventArgs args) {
+        try {Result=CollectProfile();DialogResult=DialogResult.OK;Close();}
+        catch(Exception e) {error.Text=e.Message;}
+    }
+
 }
 
 public static class Startup {
@@ -357,6 +361,13 @@ public static class Program {
             var profile=new Profile {channel=3,macIP="192.0.2.1",key=new string('a',64)};profile.Validate();
             profile.channel=2;bool rejected=false;try{profile.Validate();}catch(ArgumentException){rejected=true;}if(!rejected)throw new Exception("Duplicate channels accepted");profile.channel=3;
             using(var form=new SetupForm(profile)){if(form.Controls.Count<18)throw new Exception("Setup form incomplete");}
+            for(int coordinator=1;coordinator<=3;coordinator++) {
+                var mapping=new Profile {channel=coordinator==1?2:1,macChannel=coordinator,macIP="192.0.2.1",key=new string('a',64),inputs=new[]{77,88,99},returnInput=new[]{77,88,99}[coordinator-1]};
+                using(var form=new SetupForm(mapping)) {
+                    Profile saved=form.CollectProfile();
+                    if(!saved.inputs.SequenceEqual(mapping.inputs) || Object.ReferenceEquals(saved.inputs,mapping.inputs) || saved.macChannel!=coordinator)throw new Exception("Setup lost the imported input mapping");
+                }
+            }
             using(var icon=Icon.ExtractAssociatedIcon(Application.ExecutablePath)){if(icon==null || icon.Width<16)throw new Exception("Embedded icon missing");}
             byte[] notification=new byte[20];notification[0]=0x11;notification[1]=1;notification[2]=9;notification[4]=2;notification[5]=1;
             if(!MonitorSwitchHid.IsMacSwitchNotification(notification,1,9))throw new Exception("Bolt notification not recognized");
@@ -386,7 +397,7 @@ public static class Program {
             try {profile.Save(Path.Combine(temp,"config.json"));profile.Save(Path.Combine(temp,"config.json"));if(Profile.Read(Path.Combine(temp,"config.json")).key!=profile.key)throw new Exception("Profile persistence failed");}finally{if(Directory.Exists(temp))Directory.Delete(temp,true);}
             byte[] active=Store.Packet(profile,episode,false,true,key),inactive=Store.Packet(profile,episode,false,false,key);
             File.WriteAllText(report+".packets.json",new JavaScriptSerializer().Serialize(new Dictionary<string,object>{{"key",profile.key},{"packets",new[]{Encoding.UTF8.GetString(ready),Encoding.UTF8.GetString(active),Encoding.UTF8.GetString(inactive)}}}));
-            File.WriteAllText(report,"PASS: profile validation, setup form, embedded icon, exact Bolt notification, signed DDC input, replay/stale rejection, Windows targets 1/3, readiness packet.\n");return 0;
+            File.WriteAllText(report,"PASS: profile validation, setup preserves imported input maps for all coordinator channels, embedded icon, exact Bolt notification, signed DDC input, replay/stale rejection, Windows targets 1/3, readiness packet.\n");return 0;
         }catch(Exception e){File.WriteAllText(report,"FAIL: "+e+"\n");return 1;}
     }
 }

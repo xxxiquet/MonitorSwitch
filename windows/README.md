@@ -16,6 +16,8 @@ All computers must be awake and on the same reachable LAN. Enable DDC/CI on the 
 
 Version 0.10.0-test2 adds authenticated target-input commands for direct Windows-to-Windows transitions. Update both Windows companions and the Mac relay. Private profiles include the three monitor input codes; re-export profiles after changing mappings. The fast Bolt path for Device 3 → Mac remains separate.
 
+Version 0.10.0-test3 preserves imported monitor input maps when saving setup, including configurations with the Mac on channel 3. When upgrading an existing installation, use **Setup device… → Import profile…** to import the included `config.json`, then **Save**. The existing per-user profile takes priority over an adjacent packaged profile.
+
 ## Tray menu
 
 | Item | Behavior |
@@ -47,4 +49,4 @@ Requires Windows with .NET Framework 4.8 and an interactive user session. The ex
 
 ## Antivirus test build
 
-Version **0.10.0-test2** replaces the PowerShell runtime with a compiled application. Kaspersky Endpoint Security reported `PDM:Trojan.Win32.Generic` against the previous `MonitorSwitch-Tray.ps1`. The cause and whether that was a false positive are not established. This unsigned test executable has not yet been validated with Kaspersky or the physical Windows devices. Keep antivirus enabled during testing; do not add exclusions or bypass organizational restrictions. If a warning occurs, quit the app and record the detection name, file path and diagnostic logs. Private profiles and configured archives must not be uploaded to scanning services.
+Version **0.10.0-test3** replaces the PowerShell runtime with a compiled application. Kaspersky Endpoint Security reported `PDM:Trojan.Win32.Generic` against the previous `MonitorSwitch-Tray.ps1`. The cause and whether that was a false positive are not established. This unsigned test executable has not yet been validated with Kaspersky or the physical Windows devices. Keep antivirus enabled during testing; do not add exclusions or bypass organizational restrictions. If a warning occurs, quit the app and record the detection name, file path and diagnostic logs. Private profiles and configured archives must not be uploaded to scanning services.
