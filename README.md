@@ -14,7 +14,7 @@ MonitorSwitch follows the **physical Logitech Easy-Switch buttons** and changes 
 
 The keyboard's own Easy-Switch action controls the keyboard connection. MonitorSwitch follows that action; it does not re-pair devices or switch your mouse. If your mouse already follows the keyboard through Logitech’s own feature, it continues to do so independently.
 
-Windows helpers identify the keyboard and announce confirmed device changes using authenticated UDP messages. The macOS coordinator controls the monitor through `m1ddc`. The coordinator sends authenticated target-input commands to the previous Windows device and the destination Windows device. The active HDMI connection can therefore switch the monitor directly between Windows devices when inactive USB-C no longer accepts DDC commands. A confirmed Bolt ChangeHost notification provides the fast return path on Device 3. A disconnect alone is never treated as a destination selection.
+Windows helpers identify the keyboard and announce confirmed device changes using authenticated UDP messages. The macOS coordinator controls the monitor through `m1ddc`. The coordinator sends authenticated target-input commands to the previous Windows device and the destination Windows device. The active HDMI connection can therefore switch the monitor directly between Windows devices when inactive USB-C no longer accepts DDC commands. A confirmed Bolt ChangeHost notification provides a fast return path for the original Windows 3 → Mac 2 assignment. A disconnect alone is never treated as a destination selection.
 
 ## Compatibility
 
@@ -44,10 +44,14 @@ Output: `build/MonitorSwitch.app`. The build does **not** install configuration,
 
 1. Connect the monitor, enable DDC/CI and pair each physical keyboard channel with its computer.
 2. Open the macOS app. **Setup devices…** opens on first launch; it is also available in the menu. Assign exactly one row to **macOS** and the other rows to **Windows**. Select your connected monitor, its input for each device, its Windows monitor name and this Mac's LAN IPv4 address. Save the setup. The app creates private pairing keys automatically and preserves existing keys.
-3. Choose **Export Windows profiles…** and select a folder. Transfer each exported JSON profile privately to its matching Windows computer.
-4. On Windows, extract the public Windows archive and run **MonitorSwitch.exe**. On first launch, the setup form opens. Click **Import profile…**, select that computer's JSON file and click **Save**. The tray icon appears. You can reopen the form through **Setup device…**.
+3. Choose **Pair Windows device…**, select the Windows device number and copy its pairing code. The code expires after five minutes and can be used once.
+4. On Windows, download and run **MonitorSwitch.exe**. Paste the code into **Connect to Mac** and click **Connect**. No companion files or installer are required. Repeat with a fresh code for the other Windows device.
 5. Grant **Input Monitoring** to the macOS app in System Settings → Privacy & Security if requested, then restart it. macOS may require authentication to grant that permission; Windows setup does not request administrator privileges.
-6. Test the physical buttons with all computers awake. If you change device numbers or monitor input mappings, export and import updated Windows profiles.
+6. Test the physical buttons with all computers awake. After changing device numbers or input mappings, reconnect Windows using fresh codes.
+
+Existing Windows installations keep their settings. To reconnect, right-click the tray icon → **Connect to Mac…**. **Advanced settings… → Import profile…** still supports private JSON profiles from previous releases. The same executable works for either Windows device; the pairing code selects its number and inputs.
+
+Keep the entire code private: it contains a temporary authorization secret. The profile is encrypted and authenticated in transit; the Windows pairing key is stored using the current account's Windows data protection. See [Pairing protocol](docs/PAIRING.md) for the security boundary. The Mac and Windows must be reachable directly on the same IPv4 LAN; network policy may block the temporary pairing port.
 
 The default mapping in the table above is editable. One macOS coordinator is required; a Windows-only configuration and multiple macOS coordinators are not supported.
 
@@ -58,7 +62,8 @@ Private profiles and pairing configurations contain keys. Do not upload them to 
 - **Device 1 / Device 2 / Device 3** — manually request the associated input.
 - **Follow Easy-Switch** — enable or pause automatic following.
 - **Setup devices…** — choose device names, macOS / Windows, monitor and inputs.
-- **Export Windows profiles…** — save private pairing files for the Windows companions.
+- **Pair Windows device…** — create a temporary code for one Windows companion.
+- **Export Windows profiles…** — optional private JSON files for advanced setup.
 - **Diagnostics → Observe only** — log automatic events without switching the display.
 - **Diagnostics → Read current input** — request the current DDC input value.
 - **Diagnostics → Open logs folder** — open `~/Library/Logs/MonitorSwitch`.
@@ -68,13 +73,13 @@ The device checkmark represents the last requested channel. A successful DDC wri
 
 For macOS login startup, add the same app bundle to System Settings → General → Login Items. Keep the installed app at a stable path. A rebuild changes an ad-hoc signature and may require re-enabling Input Monitoring.
 
-Windows **0.10.0-test2** is an unsigned native test build. The previous PowerShell version triggered a Kaspersky behavior warning; antivirus compatibility and physical switching for the replacement remain pending. See [Windows README](windows/README.md#antivirus-test-build).
+Windows **0.11.0-test1** is an unsigned native test build. The previous PowerShell version triggered a Kaspersky behavior warning; antivirus compatibility and physical switching for the replacement remain pending. See [Windows README](windows/README.md#antivirus-test-build).
 
 ## Windows tray menu
 
 - **Follow Easy-Switch** — enable or pause the connection worker, with a state checkmark.
 - **Launch at sign-in** — enable or disable current-user startup; the checkmark reflects the Startup shortcut.
-- **Setup device…** — import a profile or edit this computer’s settings.
+- **Advanced settings…** — import a profile or edit this computer’s settings.
 - **Diagnostics** — open logs or export a diagnostic ZIP without configuration or pairing keys.
 - **Quit MonitorSwitch** — close the application and its connection worker.
 
@@ -82,7 +87,7 @@ This is a user-session application, not a Windows service. It starts after sign-
 
 ## Troubleshooting
 
-**No tray icon:** check the hidden-icons arrow. Extract the full package and use the setup form to import your device profile. Quit an older helper before upgrading. If needed, use `Run-Diagnostic.cmd` after quitting the tray app.
+**No tray icon:** check the hidden-icons arrow and finish connecting to the Mac. Quit an older helper before upgrading. Diagnostics are available in the tray menu.
 
 **The macOS input does not return:** keep both apps running and the computers awake. Check the Windows diagnostic log for receiver readiness and confirmed keyboard identity. Bluetooth reconnection can take longer than the confirmed Bolt event path.
 
@@ -93,6 +98,10 @@ This is a user-session application, not a Windows service. It starts after sign-
 **DDC writes fail:** check DDC/CI, the selected display UUID and input codes. Some docks, cables and inactive monitor inputs do not carry DDC commands. This release's Windows identification intentionally avoids changing unrelated displays.
 
 **Diagnostics:** macOS logs live in `~/Library/Logs/MonitorSwitch`; Windows logs live in `%LOCALAPPDATA%\MonitorSwitch\Native`. Logs record service messages and hardware/network diagnostics, not typed text. They may contain local addresses and device identifiers: review before sharing. Never share pairing files.
+
+## Known limitations
+
+This is an experimental utility validated with a limited hardware setup. It is not a universal KVM. Unsigned Windows builds can trigger endpoint protection; macOS builds are ad-hoc signed and may need Input Monitoring reauthorization after an update. The Mac app currently requires Apple Command Line Tools, including Python 3. Bluetooth detection can be slower than the specific Bolt fast path. See [review and remaining issues](docs/REVIEW.md).
 
 ## Development and release packaging
 

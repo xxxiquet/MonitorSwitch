@@ -41,7 +41,11 @@ public sealed class Profile {
     }
     public static Profile Read(string path) {
         if (new FileInfo(path).Length > 16384) throw new ArgumentException("Profile is too large.");
-        var profile = new JavaScriptSerializer().Deserialize<Profile>(File.ReadAllText(path));
+        string json=File.ReadAllText(path);
+        var serializer=new JavaScriptSerializer();var profile=serializer.Deserialize<Profile>(json);
+        var fields=serializer.Deserialize<Dictionary<string,object>>(json);
+        if(profile==null || fields==null)throw new ArgumentException("Empty profile.");
+        if(fields.ContainsKey("protectedKey"))profile.key=Encoding.UTF8.GetString(ProtectedData.Unprotect(Convert.FromBase64String((string)fields["protectedKey"]),null,DataProtectionScope.CurrentUser));
         if (profile == null) throw new ArgumentException("Empty profile.");
         profile.Validate(); return profile;
     }
@@ -49,14 +53,16 @@ public sealed class Profile {
         Validate(); Directory.CreateDirectory(Path.GetDirectoryName(path));
         string temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try {
-            File.WriteAllText(temp, new JavaScriptSerializer().Serialize(this), new UTF8Encoding(false));
+            var serializer=new JavaScriptSerializer();var stored=serializer.Deserialize<Dictionary<string,object>>(serializer.Serialize(this));stored.Remove("key");
+            stored["protectedKey"]=Convert.ToBase64String(ProtectedData.Protect(Encoding.UTF8.GetBytes(key),null,DataProtectionScope.CurrentUser));
+            File.WriteAllText(temp,serializer.Serialize(stored),new UTF8Encoding(false));
             if (File.Exists(path)) File.Replace(temp, path, null); else File.Move(temp, path);
         } finally { if (File.Exists(temp)) File.Delete(temp); }
     }
 }
 
 public static class Store {
-    public const string Version = "0.10.0-test3";
+    public const string Version = "0.11.0-test1";
     public static readonly string Folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonitorSwitch", "Native");
     public static readonly string Config = Path.Combine(Folder, "config.json");
     public static readonly string Diagnostic = Path.Combine(Folder, "diagnostic.log");
@@ -209,6 +215,25 @@ public sealed class Engine : IDisposable {
     public void Dispose() { Stop(); }
 }
 
+public sealed class ConnectForm : Form {
+    public Profile Result;
+    public ConnectForm() {
+        Text="MonitorSwitch | Connect to Mac";ClientSize=new Size(490,210);StartPosition=FormStartPosition.CenterScreen;FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=false;MinimizeBox=false;
+        Icon=Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+        var label=new Label {Text="On your Mac, open MonitorSwitch → Pair Windows device...\nChoose this device and copy its pairing code.",Left=20,Top=20,Width=450,Height=60};Controls.Add(label);
+        var code=new TextBox {Left=20,Top=85,Width=450};Controls.Add(code);
+        var advanced=new Button {Text="Advanced setup...",Left=20,Top=155,Width=145};Controls.Add(advanced);
+        advanced.Click+=delegate{using(var setup=new SetupForm(null)){if(setup.ShowDialog(this)==DialogResult.OK){Result=setup.Result;DialogResult=DialogResult.OK;Close();}}};
+        var button=new Button {Text="Connect",Left=350,Top=155,Width=120};Controls.Add(button);AcceptButton=button;
+        button.Click+=async delegate {
+            button.Enabled=false;advanced.Enabled=false;code.Enabled=false;ControlBox=false;label.Text="Connecting...";
+            try {string text=code.Text;Result=await System.Threading.Tasks.Task.Run(()=>Pairing.Connect(text));DialogResult=DialogResult.OK;Close();}
+            catch(Exception e){label.Text=e.Message;button.Enabled=true;advanced.Enabled=true;code.Enabled=true;ControlBox=true;}
+        };
+    }
+    protected override void Dispose(bool disposing){if(disposing && Icon!=null){Icon.Dispose();Icon=null;}base.Dispose(disposing);}
+}
+
 public sealed class SetupForm : Form {
     readonly Dictionary<string,Control> fields = new Dictionary<string,Control>();
     readonly Label error = new Label();
@@ -216,7 +241,7 @@ public sealed class SetupForm : Form {
     int[] inputMap;
     public SetupForm(Profile profile) {
         Text="MonitorSwitch | Device setup"; Icon=Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-        ClientSize=new Size(510,450); StartPosition=FormStartPosition.CenterScreen; FormBorderStyle=FormBorderStyle.FixedDialog; MaximizeBox=false; MinimizeBox=false;
+        ClientSize=new Size(510,510); StartPosition=FormStartPosition.CenterScreen; FormBorderStyle=FormBorderStyle.FixedDialog; MaximizeBox=false; MinimizeBox=false;
         string[] names={"deviceType","channel","macChannel","macIP","key","returnInput","monitorModel","port"};
         string[] labels={"System","This device","macOS coordinator","Coordinator IPv4 address","Pairing key","Coordinator monitor input","Windows monitor name","UDP port"};
         for(int i=0;i<names.Length;i++) {
@@ -227,9 +252,13 @@ public sealed class SetupForm : Form {
             control.SetBounds(220,20+i*36,265,26);Controls.Add(control);fields[names[i]]=control;
         }
         error.ForeColor=Color.Firebrick;error.SetBounds(20,320,465,65);Controls.Add(error);
-        var import=new Button {Text="Import profile..."}; import.SetBounds(20,400,140,30);Controls.Add(import);import.Click+=Import;
-        var save=new Button {Text="Save"};save.SetBounds(300,400,85,30);Controls.Add(save);save.Click+=Save;
-        var cancel=new Button {Text="Cancel",DialogResult=DialogResult.Cancel};cancel.SetBounds(400,400,85,30);Controls.Add(cancel);CancelButton=cancel;
+        var pair=new Button {Text="Connect with pairing code..."};pair.SetBounds(20,20,465,34);Controls.Add(pair);pair.Click+=Pair;
+        foreach(Control field in fields.Values)field.Top+=45;
+        foreach(Control label in Controls)if(label is Label && label!=error)label.Top+=45;
+        error.Top+=45;
+        var import=new Button {Text="Import profile..."}; import.SetBounds(20,460,140,30);Controls.Add(import);import.Click+=Import;
+        var save=new Button {Text="Save"};save.SetBounds(300,460,85,30);Controls.Add(save);save.Click+=Save;
+        var cancel=new Button {Text="Cancel",DialogResult=DialogResult.Cancel};cancel.SetBounds(400,460,85,30);Controls.Add(cancel);CancelButton=cancel;
         Fill(profile??new Profile());
     }
     protected override void Dispose(bool disposing) {if(disposing && Icon!=null){Icon.Dispose();Icon=null;}base.Dispose(disposing);}
@@ -239,6 +268,9 @@ public sealed class SetupForm : Form {
             if(dialog.ShowDialog(this)!=DialogResult.OK)return;
             try { Fill(Profile.Read(dialog.FileName));error.Text=""; } catch(Exception e) {error.Text=e.Message;}
         }
+    }
+    void Pair(object sender,EventArgs args) {
+        using(var dialog=new ConnectForm())if(dialog.ShowDialog(this)==DialogResult.OK){Fill(dialog.Result);error.Text="Profile received. Click Save to apply.";}
     }
     internal Profile CollectProfile() {
         var profile=new Profile {inputs=(int[])inputMap.Clone()};
@@ -292,7 +324,8 @@ public sealed class TrayContext : ApplicationContext {
         var title=menu.Items.Add("MonitorSwitch | Device "+profile.channel);title.Enabled=false;
         status=(ToolStripMenuItem)menu.Items.Add("Starting...");status.Enabled=false;menu.Items.Add(new ToolStripSeparator());
         follow=(ToolStripMenuItem)menu.Items.Add("Follow Easy-Switch");follow.Click+=delegate{if(engine!=null && engine.IsRunning)engine.Stop();else Start();};
-        var setup=menu.Items.Add("Setup device...");setup.Click+=Setup;
+        var connect=menu.Items.Add("Connect to Mac...");connect.Click+=Reconnect;
+        var setup=menu.Items.Add("Advanced settings...");setup.Click+=Setup;
         startup=(ToolStripMenuItem)menu.Items.Add("Launch at sign-in");startup.Click+=delegate{Try(delegate{if(Startup.Enabled(profile.channel))Startup.Disable(profile.channel);else Startup.Enable(profile);Refresh();});};
         var diagnostics=new ToolStripMenuItem("Diagnostics");
         diagnostics.DropDownItems.Add("Open logs folder",null,delegate{Try(delegate{System.Diagnostics.Process.Start(Store.Folder);});});
@@ -304,6 +337,17 @@ public sealed class TrayContext : ApplicationContext {
     void Try(Action action) {try{action();}catch(Exception e){MessageBox.Show(e.Message,"MonitorSwitch",MessageBoxButtons.OK,MessageBoxIcon.Error);}}
     void Start() {Try(delegate{if(engine!=null && engine.IsRunning)throw new InvalidOperationException("Connection is still stopping.");engine=new Engine(profile);engine.Start();});}
     void Refresh() {follow.Checked=engine!=null && engine.IsRunning;status.Text=engine==null?"Paused":engine.State;try{startup.Checked=Startup.Enabled(profile.channel);}catch{startup.Checked=false;}}
+    void Reconnect(object sender,EventArgs args) {
+        Try(delegate {
+            bool wasRunning=engine!=null && engine.IsRunning;
+            if(engine!=null && !engine.Stop())throw new InvalidOperationException("Connection is still stopping. Try again in a moment.");
+            try {using(var dialog=new ConnectForm())if(dialog.ShowDialog()==DialogResult.OK){
+                bool wasStartup=Startup.Enabled(profile.channel);int old=profile.channel;Profile next=dialog.Result;next.Save(Store.Config);profile=next;
+                if(wasStartup){Startup.Enable(next);if(old!=next.channel)Startup.Disable(old);}
+                tray.Text="MonitorSwitch | Device "+profile.channel;menu.Items[0].Text=tray.Text;
+            }}finally{if(wasRunning)Start();Refresh();}
+        });
+    }
     void Setup(object sender,EventArgs args) {
         Try(delegate{
             bool wasRunning=engine!=null && engine.IsRunning;
@@ -340,7 +384,7 @@ public static class Program {
     [STAThread]
     public static int Main(string[] args) {
         Application.EnableVisualStyles();Application.SetCompatibleTextRenderingDefault(false);
-        if(args.Length>0 && args[0]=="--self-test")return SelfTest(args.Length>1?args[1]:"self-test-result.txt");
+        if(args.Length>0 && args[0]=="--self-test")return SelfTest(args.Length>1?args[1]:"self-test-result.txt",args.Length>2?args[2]:null);
         using(var mutex=new Mutex(false,"Local\\MonitorSwitch-Native")) {
             bool owner;try{owner=mutex.WaitOne(0);}catch(AbandonedMutexException){owner=true;}
             if(!owner){MessageBox.Show("MonitorSwitch is already running. Open its icon near the clock.","MonitorSwitch");return 0;}
@@ -350,14 +394,16 @@ public static class Program {
                     if(File.Exists(Store.Config))profile=Profile.Read(Store.Config);
                     else {string preset=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"config.json");if(File.Exists(preset)){profile=Profile.Read(preset);profile.Save(Store.Config);}}
                 }catch(Exception e){MessageBox.Show("Setup needs attention: "+e.Message,"MonitorSwitch");}
-                if(profile==null)using(var setup=new SetupForm(null)){if(setup.ShowDialog()!=DialogResult.OK)return 0;profile=setup.Result;profile.Save(Store.Config);}
+                if(profile==null)using(var setup=new ConnectForm()){if(setup.ShowDialog()!=DialogResult.OK)return 0;profile=setup.Result;profile.Save(Store.Config);}
                 Application.Run(new TrayContext(profile));return 0;
             }catch(Exception e){MessageBox.Show(e.Message,"MonitorSwitch",MessageBoxButtons.OK,MessageBoxIcon.Error);return 1;}
             finally {mutex.ReleaseMutex();}
         }
     }
-    static int SelfTest(string report) {
+    static int SelfTest(string report,string fixture) {
         try {
+            if(fixture!=null)Pairing.SelfTest(fixture);
+            using(var connect=new ConnectForm()){if(connect.Controls.Count<4)throw new Exception("Connect form incomplete");}
             var profile=new Profile {channel=3,macIP="192.0.2.1",key=new string('a',64)};profile.Validate();
             profile.channel=2;bool rejected=false;try{profile.Validate();}catch(ArgumentException){rejected=true;}if(!rejected)throw new Exception("Duplicate channels accepted");profile.channel=3;
             using(var form=new SetupForm(profile)){if(form.Controls.Count<18)throw new Exception("Setup form incomplete");}
@@ -392,12 +438,16 @@ public static class Program {
                 MonitorSwitchReturnListener.SetEpisode(episode);
                 if(MonitorSwitchReturnListener.TryAuthenticate(packet.Replace("\"input\":"+code,"\"input\":99"),key,now,out verified))throw new Exception("Unconfigured/tampered input accepted");
             }
+            foreach(string malformed in new[]{packet.Replace("\"v\":3","\"v\":true"),packet.Replace("\"time\":1000","\"time\":9223372036854775807"),packet.Replace("{","{\"extra\":1,"),"not JSON"}) {
+                MonitorSwitchReturnListener.SetEpisode(episode);uint ignored;
+                if(MonitorSwitchReturnListener.TryAuthenticate(malformed,key,now,out ignored))throw new Exception("Malformed input accepted");
+            }
             byte[] ready=Store.Packet(profile,episode,true,false,key);var readyObject=new JavaScriptSerializer().Deserialize<Dictionary<string,object>>(Encoding.UTF8.GetString(ready));if((int)readyObject["v"]!=2 || readyObject.ContainsKey("active"))throw new Exception("Readiness format changed");
             string temp=Path.Combine(Path.GetTempPath(),"MonitorSwitch-test-"+Guid.NewGuid().ToString("N"));
-            try {profile.Save(Path.Combine(temp,"config.json"));profile.Save(Path.Combine(temp,"config.json"));if(Profile.Read(Path.Combine(temp,"config.json")).key!=profile.key)throw new Exception("Profile persistence failed");}finally{if(Directory.Exists(temp))Directory.Delete(temp,true);}
+            try {profile.Save(Path.Combine(temp,"config.json"));profile.Save(Path.Combine(temp,"config.json"));if(File.ReadAllText(Path.Combine(temp,"config.json")).Contains(profile.key))throw new Exception("Plaintext pairing key stored");if(Profile.Read(Path.Combine(temp,"config.json")).key!=profile.key)throw new Exception("Profile persistence failed");}finally{if(Directory.Exists(temp))Directory.Delete(temp,true);}
             byte[] active=Store.Packet(profile,episode,false,true,key),inactive=Store.Packet(profile,episode,false,false,key);
             File.WriteAllText(report+".packets.json",new JavaScriptSerializer().Serialize(new Dictionary<string,object>{{"key",profile.key},{"packets",new[]{Encoding.UTF8.GetString(ready),Encoding.UTF8.GetString(active),Encoding.UTF8.GetString(inactive)}}}));
-            File.WriteAllText(report,"PASS: profile validation, setup preserves imported input maps for all coordinator channels, embedded icon, exact Bolt notification, signed DDC input, replay/stale rejection, Windows targets 1/3, readiness packet.\n");return 0;
+            File.WriteAllText(report,"PASS: cross-platform encrypted pairing, DPAPI key storage, malformed packet rejection, profile validation, setup preserves imported input maps for all coordinator channels, embedded icon, exact Bolt notification, signed DDC input, replay/stale rejection, Windows targets 1/3, readiness packet.\n");return 0;
         }catch(Exception e){File.WriteAllText(report,"FAIL: "+e+"\n");return 1;}
     }
 }

@@ -16,9 +16,10 @@ def package(output, channel=None, config=None, executable=None):
     prefix = f'MonitorSwitch-Device{channel}' if channel else 'MonitorSwitch-Windows'
     with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as archive:
         archive.write(executable, f'{prefix}/MonitorSwitch.exe')
-        archive.write(ROOT/'windows/README.md', f'{prefix}/README.md')
-        for notice in ('LICENSE', 'THIRD_PARTY_NOTICES.md'):
-            archive.write(ROOT/notice, f'{prefix}/{notice}')
+        if config:
+            archive.write(ROOT/'windows/README.md', f'{prefix}/README.md')
+            for notice in ('LICENSE','THIRD_PARTY_NOTICES.md'):
+                archive.write(ROOT/notice,f'{prefix}/{notice}')
         if config:
             archive.writestr(f'{prefix}/config.json', json.dumps(config, indent=2) + '\n')
     output.chmod(0o600 if config else 0o644)

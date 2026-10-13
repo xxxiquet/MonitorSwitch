@@ -48,6 +48,9 @@ static NSInteger targetFromReport(const uint8_t *bytes, CFIndex length, uint32_t
 @property NSMutableData *networkBuffer;
 @property NSMutableSet<NSNumber *> *networkHostsSeen;
 @property double networkRetryAt;
+@property NSTask *pairingTask;
+@property NSPipe *pairingPipe;
+@property NSMutableData *pairingBuffer;
 - (void)received:(const uint8_t *)bytes length:(CFIndex)length reportID:(uint32_t)reportID;
 - (void)startNetworkListener;
 - (void)stopNetworkListener;
@@ -170,6 +173,7 @@ static void hidRemoved(void *context, IOReturn result, void *sender, IOHIDDevice
     self.autoItem = [self item:@"Follow Easy-Switch" action:@selector(toggleAuto:) tag:0];
     self.autoItem.state = self.automatic ? NSControlStateValueOn : NSControlStateValueOff; [menu addItem:self.autoItem];
     [menu addItem:[self item:@"Setup devices…" action:@selector(settings:) tag:0]];
+    [menu addItem:[self item:@"Pair Windows device…" action:@selector(pairWindows:) tag:0]];
     [menu addItem:[self item:@"Export Windows profiles…" action:@selector(exportProfiles:) tag:0]];
     NSMenuItem *diagnostics = [self item:@"Diagnostics" action:nil tag:0];
     diagnostics.image = [NSImage imageWithSystemSymbolName:@"waveform.path.ecg" accessibilityDescription:nil];
@@ -523,7 +527,64 @@ static void hidRemoved(void *context, IOReturn result, void *sender, IOHIDDevice
         [[NSFileManager defaultManager] setAttributes:@{NSFilePosixPermissions:@0600} ofItemAtPath:path error:nil];
         self.names=nextNames;self.inputs=nextInputs;self.deviceTypes=nextTypes;self.macChannel=local;self.displayUUID=config[@"displayUUID"];
         [self.prefs setObject:self.names forKey:@"names"];[self.prefs setObject:self.inputs forKey:@"inputs"];[self.prefs setObject:self.displayUUID forKey:@"displayUUID"];
-        [self stopNetworkListener];self.networkRetryAt=0;self.requestedChannel=NSNotFound;[self closeKeyboard];[self startNetworkListener];[self tick];[self rebuildMenu];[self status:@"Setup saved · export profiles for your Windows devices"];break;
+        [self stopPairing];[self stopNetworkListener];self.networkRetryAt=0;self.requestedChannel=NSNotFound;[self closeKeyboard];[self startNetworkListener];[self tick];[self rebuildMenu];[self status:@"Setup saved · export profiles for your Windows devices"];break;
+    }
+}
+- (NSDictionary *)windowsProfile:(NSInteger)channel {
+    NSDictionary *config=[self configuration];
+    if(channel==self.macChannel || !config[@"keys"][[ @(channel) stringValue]])return nil;
+    return @{@"deviceType":@"Windows",@"channel":@(channel),@"macChannel":@(self.macChannel),@"macIP":config[@"macIP"],@"port":config[@"port"],@"key":config[@"keys"][[ @(channel) stringValue]],@"returnInput":self.inputs[self.macChannel-1],@"inputs":self.inputs,@"monitorModel":config[@"monitorModel"] ?: @"G274QPF"};
+}
+- (void)stopPairing {
+    self.pairingPipe.fileHandleForReading.readabilityHandler=nil;
+    if(self.pairingTask.running)[self.pairingTask terminate];
+    self.pairingTask=nil;self.pairingPipe=nil;self.pairingBuffer=nil;
+}
+- (void)pairWindows:(id)sender {
+    NSAlert *choose=NSAlert.new;choose.messageText=@"Pair a Windows device";
+    choose.informativeText=@"Choose the computer to connect. Both devices must be on the same network.";
+    NSPopUpButton *devices=[[NSPopUpButton alloc] initWithFrame:NSMakeRect(0,0,300,30)];
+    for(NSInteger channel=1;channel<=3;channel++)if(channel!=self.macChannel){[devices addItemWithTitle:self.names[channel-1]];devices.lastItem.representedObject=@(channel);}
+    choose.accessoryView=devices;[choose addButtonWithTitle:@"Create pairing code"];[choose addButtonWithTitle:@"Cancel"];
+    if([choose runModal]!=NSAlertFirstButtonReturn)return;
+    NSDictionary *profile=[self windowsProfile:[devices.selectedItem.representedObject integerValue]];
+    if(!profile){[self status:@"Configure your devices before pairing"];return;}
+    uint8_t bytes[16];if(SecRandomCopyBytes(kSecRandomDefault,16,bytes)!=errSecSuccess){[self status:@"Could not generate a pairing code"];return;}
+    NSMutableString *secret=NSMutableString.string;for(int i=0;i<16;i++)[secret appendFormat:@"%02x",bytes[i]];
+    [self stopPairing];self.pairingBuffer=NSMutableData.data;self.pairingPipe=NSPipe.pipe;
+    NSTask *task=NSTask.new;task.executableURL=[NSURL fileURLWithPath:@"/usr/bin/python3"];
+    task.arguments=@[@"-u",[NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:@"pairing_server.py"]];
+    NSPipe *input=NSPipe.pipe;task.standardInput=input;task.standardOutput=self.pairingPipe;task.standardError=[NSFileHandle fileHandleWithNullDevice];
+    __weak MonitorSwitch *weakSelf=self;
+    __weak NSTask *weakTask=task;
+    self.pairingPipe.fileHandleForReading.readabilityHandler=^(NSFileHandle *handle){
+        NSData *data=handle.availableData;if(!data.length){handle.readabilityHandler=nil;return;}
+        dispatch_async(dispatch_get_main_queue(),^{if(weakSelf.pairingTask==weakTask)[weakSelf pairingOutput:data];});
+    };
+    self.pairingTask=task;NSError *failure=nil;
+    if(![task launchAndReturnError:&failure]){[self stopPairing];[self status:@"Pairing could not start"];return;}
+    NSMutableData *settings=[[NSJSONSerialization dataWithJSONObject:@{@"profile":profile,@"secret":secret} options:0 error:nil] mutableCopy];
+    [settings appendData:[@"\n" dataUsingEncoding:NSUTF8StringEncoding]];
+    @try {[input.fileHandleForWriting writeData:settings];[input.fileHandleForWriting closeFile];}
+    @catch(NSException *exception){[self stopPairing];[self status:@"Pairing could not start"];}
+}
+- (void)pairingOutput:(NSData *)data {
+    if(!self.pairingBuffer)return;[self.pairingBuffer appendData:data];
+    NSData *delimiter=[@"\n" dataUsingEncoding:NSUTF8StringEncoding];
+    while(self.pairingBuffer.length){
+        NSRange end=[self.pairingBuffer rangeOfData:delimiter options:0 range:NSMakeRange(0,self.pairingBuffer.length)];if(end.location==NSNotFound)break;
+        NSData *line=[self.pairingBuffer subdataWithRange:NSMakeRange(0,end.location)];[self.pairingBuffer replaceBytesInRange:NSMakeRange(0,end.location+1) withBytes:NULL length:0];
+        NSDictionary *message=[NSJSONSerialization JSONObjectWithData:line options:0 error:nil];
+        NSString *code=message[@"code"];
+        if(code){
+            NSAlert *alert=NSAlert.new;alert.messageText=@"Connect Windows to this Mac";
+            alert.informativeText=@"Copy this private, one-use code into MonitorSwitch on Windows. It expires in five minutes. No profile file is needed.";
+            NSTextField *field=[[NSTextField alloc] initWithFrame:NSMakeRect(0,0,350,28)];field.stringValue=code;field.editable=NO;field.selectable=YES;alert.accessoryView=field;
+            [alert addButtonWithTitle:@"Copy pairing code"];[alert addButtonWithTitle:@"Close"];
+            if([alert runModal]==NSAlertFirstButtonReturn){[NSPasteboard.generalPasteboard clearContents];[NSPasteboard.generalPasteboard setString:code forType:NSPasteboardTypeString];}
+        }else if([message[@"status"] isEqual:@"paired"])[self status:@"Windows profile transmitted · check Windows connection"];
+        else if([message[@"status"] isEqual:@"expired"])[self status:@"Pairing code expired · create a new code"];
+        else [self status:@"Pairing unavailable · check the configured Mac address"];
     }
 }
 - (void)exportProfiles:(id)sender {
@@ -546,12 +607,12 @@ static void hidRemoved(void *context, IOReturn result, void *sender, IOHIDDevice
 - (void)openLog:(id)sender { [NSWorkspace.sharedWorkspace openURL:[NSURL fileURLWithPath:self.logPath.stringByDeletingLastPathComponent]]; }
 - (void)about:(id)sender {
     NSAlert *alert = NSAlert.new; alert.messageText = @"MonitorSwitch";
-    alert.informativeText = @"MonitorSwitch 0.9.4\n\nLocal Easy-Switch display control. No subscription, account or cloud.\n\nConfigure one macOS device and up to two Windows devices. Windows helpers confirm their channels over your local network. Only Logitech service reports are used; typed keys are not recorded.\n\nIncludes m1ddc (MIT).";
+    alert.informativeText = @"MonitorSwitch 0.11.0-test1\n\nLocal Easy-Switch display control. No subscription, account or cloud.\n\nConfigure one macOS device and up to two Windows devices. Windows helpers confirm their channels over your local network. Only Logitech service reports are used; typed keys are not recorded.\n\nIncludes m1ddc (MIT).";
     [NSApp activateIgnoringOtherApps:YES]; [alert runModal];
 }
 - (void)quit:(id)sender { [NSApp terminate:nil]; }
 - (void)applicationWillTerminate:(NSNotification *)notification {
-    [self.timer invalidate]; [self closeKeyboard]; [self stopNetworkListener];
+    [self stopPairing]; [self.timer invalidate]; [self closeKeyboard]; [self stopNetworkListener];
     if (self.manager) {
         IOHIDManagerUnscheduleFromRunLoop(self.manager, CFRunLoopGetMain(), kCFRunLoopCommonModes);
         CFRelease(self.manager);

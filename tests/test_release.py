@@ -36,6 +36,9 @@ class AuthenticatedEvents(unittest.TestCase):
     def test_startup_readiness_without_keyboard(self):
         event=dict(self.event,v=2);event.pop('active')
         self.assertEqual(relay.decode_packet(self.signed(event),self.keys,1000,{})['v'],2)
+    def test_boolean_version_rejected(self):
+        event=dict(self.event,v=True)
+        self.assertIsNone(relay.decode_packet(self.signed(event),self.keys,1000,{}))
     def test_tampered_channel_rejected(self):
         event=json.loads(self.signed(self.event));event['channel']=1
         self.assertIsNone(relay.decode_packet(json.dumps(event).encode(),self.keys,1000,{}))
@@ -66,13 +69,13 @@ class WindowsInputRouting(unittest.TestCase):
 
 
 class ReleaseContents(unittest.TestCase):
-    def test_public_package_contains_tray_and_docs_but_no_config(self):
+    def test_public_package_contains_only_one_executable(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/'public.zip';exe=Path(tmp)/'fixture.exe';exe.write_bytes(b'MZ-package-test-fixture');setup.package(path,executable=exe)
             with zipfile.ZipFile(path) as archive:
                 names=archive.namelist()
                 self.assertTrue(any(n.endswith('/MonitorSwitch.exe') for n in names))
-                self.assertTrue(any(n.endswith('/README.md') for n in names))
+                self.assertEqual(names,['MonitorSwitch-Windows/MonitorSwitch.exe'])
                 self.assertFalse(any(n.endswith(('.ps1','.cmd','.vbs')) for n in names))
                 self.assertFalse(any(n.endswith(('.log','config.json')) for n in names))
     def test_private_packages_use_the_given_device_key_only(self):

@@ -40,7 +40,7 @@ class WindowsRoutesIntegration(unittest.TestCase):
                 while time.monotonic()<deadline:
                     try:packet=json.loads(peers[source].recv(2048))
                     except socket.timeout:continue
-                    if packet.get('v')!=3 or packet.get('target')!=target:continue
+                    if packet.get('v')!=3 or packet.get('target')!=target or packet.get('episode')!=episodes[source]:continue
                     self.assertEqual(packet['input'],input_code)
                     self.assertEqual(packet['episode'],episodes[source])
                     canonical=f"input|3|{target}|{input_code}|{packet['id']}|{packet['time']}|{episodes[source]}"
@@ -59,6 +59,12 @@ class WindowsRoutesIntegration(unittest.TestCase):
                 event(3,False);request(1,3,88)
                 episodes[1]='22'*16
                 event(1,False);request(3,1,77)
+                # Late packets from the retired session must not replace its new episode.
+                episodes[1]='11'*16
+                event(1,True);event(1,False)
+                episodes[1]='22'*16
+                episodes[3]='44'*16
+                event(3,False);request(1,3,88)
             finally:
                 process.terminate();process.communicate(timeout=5)
                 for sock in peers.values():sock.close()

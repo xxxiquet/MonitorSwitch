@@ -14,6 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: zsh build.sh
+      - run: python3 -m unittest discover -s tests -v
   windows:
     runs-on: windows-latest
     steps:
@@ -24,7 +25,7 @@ jobs:
       - name: Test native UI and protocol
         shell: cmd
         run: |
-          start "" /wait build\windows-native\MonitorSwitch.exe --self-test build\windows-native\self-test-result.txt
+          start "" /wait build\windows-native\MonitorSwitch.exe --self-test build\windows-native\self-test-result.txt tests\pairing-vector.json
           if errorlevel 1 exit /b 1
           type build\windows-native\self-test-result.txt
           python tests/check_native_fixture.py build/windows-native/self-test-result.txt.packets.json
@@ -36,4 +37,4 @@ jobs:
           path: |
             build/windows-native/MonitorSwitch.exe
             build/windows-native/self-test-result.txt
-            build/release/MonitorSwitch-Windows-0.10.0-test3.zip
+            build/release/MonitorSwitch-Windows-0.11.0-test1.zip

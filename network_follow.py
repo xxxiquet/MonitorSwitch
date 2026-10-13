@@ -33,7 +33,7 @@ def decode_packet(raw, keys, now, seen):
         fields = {'v', 'channel', 'id', 'time', 'episode', 'mac'} if ready else {'v', 'channel', 'active', 'id', 'time', 'episode', 'mac'}
         if set(p) != fields:
             return None
-        if p['v'] not in (1, 2) or type(p['channel']) is not int or p['channel'] not in keys:
+        if type(p['v']) is not int or p['v'] not in (1, 2) or type(p['channel']) is not int or p['channel'] not in keys:
             return None
         if not ready and (type(p['active']) is not int or p['active'] not in (0, 1)):
             return None
@@ -105,7 +105,7 @@ def main():
         with LOG.open('a') as f:
             f.write(line + '\n')
 
-    seen, states, retired = {}, {ch: None for ch in keys}, set()
+    seen, states, retired = {}, {ch: None for ch in keys}, {}
     peers = {}
     last_episodes = {}
     last_channel = mac_channel
@@ -144,14 +144,19 @@ def main():
         keyboard.seek(0, 2)
         try:
             while True:
+                retired = {episode: stamp for episode, stamp in retired.items() if time.time() - stamp < 120}
+                if len(seen) > 256:
+                    seen = {k: t for k, t in seen.items() if time.time() - t < 120}
                 channel = None
                 try:
                     raw, peer = sock.recvfrom(1025)
                     packet = decode_packet(raw, keys, time.time(), seen)
                     if packet:
                         ch, active = packet['channel'], bool(packet.get('active', 0))
-                        peers[ch] = peer
                         episode = packet['episode']
+                        if episode in retired:
+                            continue
+                        peers[ch] = peer
                         if packet['v'] == 2:
                             changed = ready_hosts.get(ch) != episode
                             ready_hosts[ch] = episode
@@ -163,8 +168,6 @@ def main():
                             continue
                         if active:
                             last_episodes[ch] = episode
-                        if episode in retired:
-                            continue
                         if (active and states[ch] != episode) or (not active and states[ch] == episode):
                             states[ch] = episode if active else None
                             log(f"Device {ch} ({peer[0]}): keyboard {'connected' if active else 'disconnected'}; channel={ch}")
@@ -195,7 +198,7 @@ def main():
                             request_target(host, channel)
                     for ch in states:
                         if ch != channel and states[ch] is not None:
-                            retired.add(states[ch])
+                            retired[states[ch]] = time.time()
                             states[ch] = None
                     last_channel = channel
                     if args.emit_events:
@@ -209,8 +212,6 @@ def main():
                             log(f'DDC failed: {e}')
                     else:
                         log(f'TEST: channel={channel} input={inputs[channel]}, monitor unchanged')
-                if len(seen) > 256:
-                    seen = {k: t for k, t in seen.items() if time.time() - t < 120}
         finally:
             sock.close()
 

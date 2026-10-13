@@ -1,0 +1,15 @@
+# Local pairing protocol (experimental v1)
+
+The Mac creates a five-minute, single-use server only when the user selects **Pair Windows device…**. The 35-character `MS1-` code encodes the selected Mac IPv4 address, ephemeral TCP port, Windows channel and 128 bits from Apple's secure random generator. It is an authorization secret, not a short numeric PIN. Clipboard managers can retain it: share it privately and generate another code if necessary.
+
+The helper receives the profile and random secret on stdin, not through command-line arguments. It binds only the configured IPv4 address. Windows uses that address directly with no proxy or redirects. Pairing codes, profile keys and response bodies are not logged.
+
+Windows POSTs JSON to `/pair`: version 1, a fresh 32-character nonce and HMAC-SHA256(secret, `request|1|nonce`). The server checks exact fields, size, version, nonce and proof. Invalid requests do not consume the code. An authenticated request consumes it before transmission; an interrupted transfer needs a new code. Successful transmission alone does not prove the client saved its settings.
+
+Profile JSON is AES-256-CBC with PKCS7 padding and a fresh random 16-byte IV. Keys are derived using HMAC-SHA256(secret, label), with distinct labels `MonitorSwitch pairing encryption v1` and `MonitorSwitch pairing authentication v1`. The authenticated canonical response is `response|1|nonce|base64-IV|base64-ciphertext`. Windows checks the HMAC before decrypting, verifies the requested nonce, then validates the profile's channel and address against the code. HTTP carries an encrypted, authenticated envelope; it does not carry the profile in plaintext. The endpoint and traffic metadata are visible.
+
+The Mac uses [CommonCrypto CCCrypt](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/CCCryptor.3cc.html); Windows uses [.NET AES](https://learn.microsoft.com/en-us/dotnet/api/system.security.cryptography.aes). Windows stores the pairing key with `ProtectedData` / DPAPI `CurrentUser`. Legacy plaintext profiles remain importable; new saves remove the plaintext key. Mac settings and optional exported profiles still contain keys and must remain private.
+
+This is a project-specific protocol without an independent security audit. Whoever obtains the full code can claim the profile during its validity window. A compromised account, malicious clipboard manager, local process with the same user identity, or altered application binary is outside the protection boundary. There is no account service, certificate infrastructure or automatic discovery. Firewalls may block pairing. Do not disable endpoint protection to connect.
+
+Tests exercise actual CommonCrypto encryption, loopback HTTP authentication, expiration and single-use behavior, plus a synthetic cross-platform fixture decrypted by the compiled Windows executable. The fixture contains public test keys, not installation secrets. These checks do not constitute a penetration test or endpoint-protection acceptance.

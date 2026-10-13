@@ -209,29 +209,25 @@ public static class MonitorSwitchReturnListener {
     static System.Threading.Thread worker;
     static readonly HashSet<string> seen=new HashSet<string>();
     public static void SetEpisode(string value) { lock(gate) { episode=value; seen.Clear(); } }
-    static string Field(string json,string name,string pattern) {
-        var matches=System.Text.RegularExpressions.Regex.Matches(json,"\""+name+"\"\\s*:\\s*"+pattern);
-        return matches.Count==1 ? matches[0].Groups[1].Value : "";
-    }
     public static bool Authenticate(string json,byte[] key,long now) {uint input;return TryAuthenticate(json,key,now,out input);}
     public static bool TryAuthenticate(string json,byte[] key,long now,out uint verifiedInput) {
-        verifiedInput=0;
-        if(json.Length>1024) return false;
-        string version=Field(json,"v","([13])(?=\\s*[,}])");
-        string input=Field(json,"input","([0-9]{1,3})(?=\\s*[,}])");
-        string id=Field(json,"id","\"([a-f0-9]{32})\"");
-        string timestamp=Field(json,"time","([0-9]{1,12})(?=\\s*[,}])");
-        string packetEpisode=Field(json,"episode","\"([a-f0-9]{32})\"");
-        string mac=Field(json,"mac","\"([a-f0-9]{64})\"");
-        string target=Field(json,"target","([123])(?=\\s*[,}])");
-        uint code;int targetChannel;
-        if(!UInt32.TryParse(input,out code))return false;
-        if(version=="1") {if(code!=MonitorSwitchDdc.ReturnInput)return false;}
-        else if(version=="3") {if(!Int32.TryParse(target,out targetChannel) || Inputs==null || Inputs.Length!=3 || code!=Inputs[targetChannel-1])return false;}
-        else return false;
-        long time;
-        if(id.Length!=32 || mac.Length!=64 || !Int64.TryParse(timestamp,out time) || Math.Abs(now-time)>15) return false;
-        string canonical="input|"+version+"|"+(version=="3"?target+"|":"")+input+"|"+id+"|"+timestamp+"|"+packetEpisode;
+        verifiedInput=0;if(json.Length>1024)return false;
+        Dictionary<string,object> packet;
+        try {packet=new System.Web.Script.Serialization.JavaScriptSerializer().Deserialize<Dictionary<string,object>>(json);}catch{return false;}
+        if(packet==null || !packet.ContainsKey("v") || !(packet["v"] is int))return false;
+        int version=(int)packet["v"];
+        string[] fields=version==1?new[]{"v","input","id","time","episode","mac"}:new[]{"v","target","input","id","time","episode","mac"};
+        if((version!=1 && version!=3) || packet.Count!=fields.Length)return false;
+        foreach(string field in fields)if(!packet.ContainsKey(field))return false;
+        if(!(packet["input"] is int) || !(packet["time"] is int || packet["time"] is long))return false;
+        int number=(int)packet["input"];if(number<1 || number>255)return false;uint code=(uint)number;
+        int target=0;
+        if(version==1){if(code!=MonitorSwitchDdc.ReturnInput)return false;}
+        else {if(!(packet["target"] is int))return false;target=(int)packet["target"];if(target<1 || target>3 || Inputs==null || Inputs.Length!=3 || code!=Inputs[target-1])return false;}
+        string id=packet["id"] as string,packetEpisode=packet["episode"] as string,mac=packet["mac"] as string;
+        if(id==null || packetEpisode==null || mac==null || !System.Text.RegularExpressions.Regex.IsMatch(id,"\\A[a-f0-9]{32}\\z") || !System.Text.RegularExpressions.Regex.IsMatch(packetEpisode,"\\A[a-f0-9]{32}\\z") || !System.Text.RegularExpressions.Regex.IsMatch(mac,"\\A[a-f0-9]{64}\\z"))return false;
+        long time=Convert.ToInt64(packet["time"]);if(time<0 || time>now+15 || time<now-15)return false;
+        string canonical="input|"+version+"|"+(version==3?target+"|":"")+code+"|"+id+"|"+time.ToString(System.Globalization.CultureInfo.InvariantCulture)+"|"+packetEpisode;
         byte[] digest;
         using(var h=new System.Security.Cryptography.HMACSHA256(key)) digest=h.ComputeHash(System.Text.Encoding.UTF8.GetBytes(canonical));
         string expected=BitConverter.ToString(digest).Replace("-","").ToLowerInvariant();
