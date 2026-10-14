@@ -4,7 +4,7 @@ A tray app that follows the physical Logitech Easy-Switch buttons and switches a
 
 ## Local setup (default in 0.12.0-test1)
 
-Download and run the single executable. Choose this computer's Easy-Switch number, its own monitor input code and monitor name. No Mac address or private key is required. Reopen **Local mode settings…** from the tray to change it. Existing installations keep their mappings and use local mode by default after upgrading, unless an explicit network-mode setting was saved.
+Download and run the single executable. Choose this computer's Easy-Switch number, the input codes for all three devices and monitor name. No Mac address or private key is required. Reopen **Local mode settings…** from the tray to change it. Existing installations keep their mappings and use local mode by default after upgrading, unless an explicit network-mode setting was saved.
 
 The worker confirms the keyboard on this channel, then writes the configured input through this computer's monitor connection, with up to three attempts. Local mode opens no UDP socket and does not start the network listener. It works independently of VPN routing when the monitor accepts DDC from its inactive input. If not, diagnostics show the identification/write failure; software cannot guarantee support from every monitor/driver.
 
@@ -60,3 +60,5 @@ Requires Windows with .NET Framework 4.8 and an interactive user session. The ex
 ## Antivirus test build
 
 The current **0.12.0-test1** distribution is a compiled application without a PowerShell runtime. Kaspersky Endpoint Security reported `PDM:Trojan.Win32.Generic` against the previous `MonitorSwitch-Tray.ps1`. The cause and whether that was a false positive are not established. This unsigned test executable has not yet been validated with Kaspersky or the physical Windows devices. Keep antivirus enabled during testing; do not add exclusions or bypass organizational restrictions. If a warning occurs, quit the app and record the detection name, file path and diagnostic logs. Private profiles and configured archives must not be uploaded to scanning services.
+
+In 0.12.0-test3, exact outgoing Bolt ChangeHost notifications also select the destination input through the active Windows HDMI cable. This avoids dependence on an inactive destination accepting DDC when the notification is available. All three target input codes are editable in local setup. Query replies, malformed packets and disconnection alone do not trigger this path; real-device testing is still required for the reassigned channels.

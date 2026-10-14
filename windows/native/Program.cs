@@ -96,6 +96,7 @@ public static class Store {
 
 public sealed class Engine : IDisposable {
     readonly Profile profile;
+    string localMonitorInstance="";
     Thread thread;
     volatile bool stopping;
     public string State = "Paused";
@@ -143,7 +144,7 @@ public sealed class Engine : IDisposable {
                         if(stopping || target==profile.channel)return;
                         Store.Log("Local outgoing Easy-Switch target "+target);
                         MonitorSwitchDdc.MonitorModel=profile.monitorModel;
-                        string result=MonitorSwitchDdc.SwitchInput(MonitorIdentity(),(uint)profile.inputs[target-1]);
+                        string result=MonitorSwitchDdc.SwitchInput(localMonitorInstance,(uint)profile.inputs[target-1]);
                         Store.Log("Local outgoing input "+profile.inputs[target-1]+": "+result);
                     });
                     keep = true; return new Keyboard { Hid=hid, Slot=slot, Feature=feature[4], Name=name };
@@ -175,7 +176,7 @@ public sealed class Engine : IDisposable {
         try {
             profile.Validate();MonitorSwitchReturnListener.EnableFastReturn(false);MonitorSwitchReturnListener.SetEpisode("");
             MonitorSwitchDdc.MonitorModel=profile.monitorModel;
-            string instance=MonitorIdentity();
+            string instance=MonitorIdentity();localMonitorInstance=instance;
             Store.Log("MonitorSwitch "+Store.Version+" | local mode | device "+profile.channel+" | own input "+profile.inputs[profile.channel-1]+" | no network worker");
             while(!stopping) {
                 if(keyboard==null)keyboard=FindKeyboard();bool ok=false;
@@ -261,20 +262,25 @@ public sealed class Engine : IDisposable {
 
 public sealed class LocalSetupForm : Form {
     readonly ComboBox channel=new ComboBox {DropDownStyle=ComboBoxStyle.DropDownList};
-    readonly NumericUpDown input=new NumericUpDown {Minimum=1,Maximum=255};
+    readonly NumericUpDown[] inputCodes=new NumericUpDown[3];
     readonly TextBox model=new TextBox();readonly Profile profile;
     public Profile Result;
     public LocalSetupForm(Profile current) {
         profile=current==null?new Profile {localOnly=true,macChannel=3,inputs=new[]{17,18,16},returnInput=16}:new JavaScriptSerializer().Deserialize<Profile>(new JavaScriptSerializer().Serialize(current));
-        Text="MonitorSwitch | Local setup";ClientSize=new Size(440,280);StartPosition=FormStartPosition.CenterScreen;FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=false;MinimizeBox=false;Icon=Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+        Text="MonitorSwitch | Local setup";ClientSize=new Size(440,355);StartPosition=FormStartPosition.CenterScreen;FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=false;MinimizeBox=false;Icon=Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         Controls.Add(new Label {Text="This computer switches the monitor when its keyboard connects.\nNo Mac coordinator, pairing code or network is required.",Left=20,Top=20,Width=400,Height=50});
         Controls.Add(new Label {Text="This Easy-Switch device",Left=20,Top=85,Width=200});channel.SetBounds(230,80,180,28);channel.Items.AddRange(new object[]{"1","2","3"});channel.Text=profile.channel.ToString();Controls.Add(channel);
-        Controls.Add(new Label {Text="This monitor input (DDC code)",Left=20,Top=125,Width=205});input.SetBounds(230,120,180,28);input.Value=profile.inputs[profile.channel-1];Controls.Add(input);
-        channel.SelectedIndexChanged+=delegate{input.Value=profile.inputs[channel.SelectedIndex];};
-        Controls.Add(new Label {Text="Monitor name",Left=20,Top=165,Width=200});model.SetBounds(230,160,180,28);model.Text=profile.monitorModel;Controls.Add(model);
-        var save=new Button {Text="Save",Left=230,Top=225,Width=85};Controls.Add(save);AcceptButton=save;
-        save.Click+=delegate{try{profile.localOnly=true;profile.channel=channel.SelectedIndex+1;profile.inputs[profile.channel-1]=(int)input.Value;profile.monitorModel=model.Text;profile.Validate();Result=profile;DialogResult=DialogResult.OK;Close();}catch(Exception e){MessageBox.Show(e.Message,"MonitorSwitch");}};
-        var cancel=new Button {Text="Cancel",Left=325,Top=225,Width=85,DialogResult=DialogResult.Cancel};Controls.Add(cancel);CancelButton=cancel;
+        for(int index=0;index<3;index++) {
+            Controls.Add(new Label {Text="Device "+(index+1)+" input (DDC code)",Left=20,Top=125+index*35,Width=205});
+            inputCodes[index]=new NumericUpDown {Minimum=1,Maximum=255,Value=profile.inputs[index]};inputCodes[index].SetBounds(230,120+index*35,180,28);Controls.Add(inputCodes[index]);
+        }
+        Controls.Add(new Label {Text="Monitor name",Left=20,Top=235,Width=200});model.SetBounds(230,230,180,28);model.Text=profile.monitorModel;Controls.Add(model);
+        var save=new Button {Text="Save",Left=230,Top=300,Width=85};Controls.Add(save);AcceptButton=save;
+        save.Click+=delegate{try{Result=CollectProfile();DialogResult=DialogResult.OK;Close();}catch(Exception e){MessageBox.Show(e.Message,"MonitorSwitch");}};
+        var cancel=new Button {Text="Cancel",Left=325,Top=300,Width=85,DialogResult=DialogResult.Cancel};Controls.Add(cancel);CancelButton=cancel;
+    }
+    internal Profile CollectProfile() {
+        profile.localOnly=true;profile.channel=channel.SelectedIndex+1;profile.inputs=inputCodes.Select(code=>(int)code.Value).ToArray();profile.monitorModel=model.Text;profile.Validate();return profile;
     }
     protected override void Dispose(bool disposing){if(disposing && Icon!=null){Icon.Dispose();Icon=null;}base.Dispose(disposing);}
 }
@@ -482,7 +488,7 @@ public static class Program {
             if(fixture!=null)Pairing.SelfTest(fixture);
             for(int localChannel=1;localChannel<=3;localChannel++) {
                 var standalone=new Profile {localOnly=true,channel=localChannel,macIP="",key="",inputs=new[]{17,18,16}};standalone.Validate();
-                using(var localForm=new LocalSetupForm(standalone)){if(localForm.Controls.Count<9)throw new Exception("Local setup incomplete");}
+                using(var localForm=new LocalSetupForm(standalone)){if(localForm.Controls.Count<9)throw new Exception("Local setup incomplete");if(!localForm.CollectProfile().inputs.SequenceEqual(standalone.inputs))throw new Exception("Local setup lost a target input map");}
                 string localPath=Path.Combine(Path.GetTempPath(),"MonitorSwitch-local-"+Guid.NewGuid().ToString("N"),"config.json");
                 try{standalone.Save(localPath);var saved=Profile.Read(localPath);if(!saved.localOnly || saved.inputs[localChannel-1]!=standalone.inputs[localChannel-1])throw new Exception("Local profile persistence failed");}finally{Directory.Delete(Path.GetDirectoryName(localPath),true);}
             }
