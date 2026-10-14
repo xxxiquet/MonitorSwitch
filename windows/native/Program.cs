@@ -260,8 +260,7 @@ public sealed class LocalSetupForm : Form {
     public LocalSetupForm(Profile current) {
         profile=current==null?new Profile {localOnly=true,macChannel=3,inputs=new[]{17,18,16},returnInput=16}:new JavaScriptSerializer().Deserialize<Profile>(new JavaScriptSerializer().Serialize(current));
         Text="MonitorSwitch | Local setup";ClientSize=new Size(440,280);StartPosition=FormStartPosition.CenterScreen;FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=false;MinimizeBox=false;Icon=Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-        Controls.Add(new Label {Text="This computer switches the monitor when its keyboard connects.
-No Mac coordinator, pairing code or network is required.",Left=20,Top=20,Width=400,Height=50});
+        Controls.Add(new Label {Text="This computer switches the monitor when its keyboard connects.\nNo Mac coordinator, pairing code or network is required.",Left=20,Top=20,Width=400,Height=50});
         Controls.Add(new Label {Text="This Easy-Switch device",Left=20,Top=85,Width=200});channel.SetBounds(230,80,180,28);channel.Items.AddRange(new object[]{"1","2","3"});channel.Text=profile.channel.ToString();Controls.Add(channel);
         Controls.Add(new Label {Text="This monitor input (DDC code)",Left=20,Top=125,Width=205});input.SetBounds(230,120,180,28);input.Value=profile.inputs[profile.channel-1];Controls.Add(input);
         channel.SelectedIndexChanged+=delegate{input.Value=profile.inputs[channel.SelectedIndex];};
