@@ -47,6 +47,8 @@ static NSInteger targetFromReport(const uint8_t *bytes, CFIndex length, uint32_t
 @property NSPipe *networkPipe;
 @property NSMutableData *networkBuffer;
 @property NSMutableSet<NSNumber *> *networkHostsSeen;
+@property BOOL localOnly;
+@property NSInteger localAttempts;
 @property double networkRetryAt;
 @property NSTask *pairingTask;
 @property NSPipe *pairingPipe;
@@ -113,9 +115,10 @@ static void hidRemoved(void *context, IOReturn result, void *sender, IOHIDDevice
     [[NSFileManager defaultManager] createDirectoryAtPath:logDir withIntermediateDirectories:YES attributes:nil error:nil];
     self.logPath = [logDir stringByAppendingPathComponent:@"monitor.log"];
     if (![[NSFileManager defaultManager] fileExistsAtPath:self.logPath]) [@"" writeToFile:self.logPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
-    [self.prefs registerDefaults:@{@"automatic": @YES, @"observeOnly": @NO}];
+    [self.prefs registerDefaults:@{@"automatic": @YES, @"observeOnly": @NO, @"localOnly": @YES}];
     self.automatic = [self.prefs boolForKey:@"automatic"];
     self.observeOnly = [self.prefs boolForKey:@"observeOnly"];
+    self.localOnly = [self.prefs boolForKey:@"localOnly"];
     self.networkHostsSeen = NSMutableSet.set;
     self.pendingChannel = NSNotFound;
     self.requestedChannel = NSNotFound;
@@ -172,6 +175,7 @@ static void hidRemoved(void *context, IOReturn result, void *sender, IOHIDDevice
     [menu addItem:NSMenuItem.separatorItem];
     self.autoItem = [self item:@"Follow Easy-Switch" action:@selector(toggleAuto:) tag:0];
     self.autoItem.state = self.automatic ? NSControlStateValueOn : NSControlStateValueOff; [menu addItem:self.autoItem];
+    NSMenuItem *local=[self item:@"Local mode (no network)" action:@selector(toggleLocal:) tag:0];local.state=self.localOnly?NSControlStateValueOn:NSControlStateValueOff;[menu addItem:local];
     [menu addItem:[self item:@"Setup devices…" action:@selector(settings:) tag:0]];
     [menu addItem:[self item:@"Pair Windows device…" action:@selector(pairWindows:) tag:0]];
     [menu addItem:[self item:@"Export Windows profiles…" action:@selector(exportProfiles:) tag:0]];
@@ -195,7 +199,7 @@ static void hidRemoved(void *context, IOReturn result, void *sender, IOHIDDevice
     self.statusItem.menu = menu;
 }
 - (void)startNetworkListener {
-    if (!self.automatic || self.suspended || self.networkTask.running) return;
+    if (self.localOnly || !self.automatic || self.suspended || self.networkTask.running) return;
     if (NSDate.timeIntervalSinceReferenceDate < self.networkRetryAt) return;
     self.networkRetryAt = NSDate.timeIntervalSinceReferenceDate + 30;
     NSString *config = [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/MonitorSwitch/network-config.json"];
@@ -257,7 +261,7 @@ static void hidRemoved(void *context, IOReturn result, void *sender, IOHIDDevice
     IOHIDDeviceUnscheduleFromRunLoop(self.keyboard, CFRunLoopGetMain(), kCFRunLoopCommonModes);
     IOHIDDeviceClose(self.keyboard, kIOHIDOptionsTypeNone);
     CFRelease(self.keyboard); self.keyboard = NULL; self.feature = 0; self.stage = 0;
-    self.reportBuffer = nil; self.lastServiceReport = nil; self.lastHostQuery = 0;
+    self.reportBuffer = nil; self.lastServiceReport = nil; self.lastHostQuery = 0; self.localAttempts=0;
 }
 - (void)deviceArrived:(IOHIDDeviceRef)device {
     NSString *transport = (__bridge NSString *)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDTransportKey));
@@ -334,13 +338,14 @@ static void hidRemoved(void *context, IOReturn result, void *sender, IOHIDDevice
         BOOL changed = self.stage != 3 || self.deviceHost != bytes[5];
         self.stage = 3; self.deviceHost = bytes[5];
         if (!changed) return;
-        NSInteger channel = self.deviceHost + 1;
+        NSInteger channel = self.deviceHost + 1;self.localAttempts=0;
         [self status:[NSString stringWithFormat:@"Keyboard on channel %ld · %@", channel, self.names[channel - 1]]];
         // Returning to this computer is positively identified by the device.
         // In test mode only log it; do not write any monitor values.
         if (channel == self.macChannel) [self selectChannel:channel manual:NO];
         return;
     }
+    if(self.localOnly)return;
     NSInteger channel = targetFromReport(bytes, length, reportID, self.feature);
     if (channel == NSNotFound) return;
     [self status:[NSString stringWithFormat:@"Easy-Switch → %ld · %@", channel, self.names[channel - 1]]];
@@ -351,14 +356,22 @@ static void hidRemoved(void *context, IOReturn result, void *sender, IOHIDDevice
     if (!self.displayUUID.length) { [self status:@"Select your monitor in Setup devices first"]; return; }
     int input = self.inputs[channel - 1].intValue;
     if (!input) { [self status:[NSString stringWithFormat:@"No input configured for %@", self.names[channel - 1]]]; return; }
+    if (!manual && self.localOnly && channel != self.macChannel) return;
     if (!manual && self.observeOnly) { [self log:[NSString stringWithFormat:@"TEST: channel=%ld input=%d, monitor unchanged", channel, input]]; return; }
     if (!manual && self.requestedChannel == channel) return;
     self.requestedChannel = channel;
     [self rebuildMenu];
     if (self.busy) { self.pendingChannel = channel; self.requestedChannel = NSNotFound; return; }
+    if(self.localOnly && !manual)self.localAttempts++;
     [self status:[NSString stringWithFormat:@"Switching to %@…", self.names[channel - 1]]];
     [self runDDC:@[@"display", self.displayUUID, @"set", @"input", [@(input) stringValue]] completion:^(int result, NSString *output) {
-        if (result != 0) { self.requestedChannel = NSNotFound; [self status:[NSString stringWithFormat:@"Command for %@ failed: %@", self.names[channel - 1], output]]; return; }
+        if (result != 0) {
+            self.requestedChannel = NSNotFound; [self status:[NSString stringWithFormat:@"Command for %@ failed: %@", self.names[channel - 1], output]];
+            if(self.localOnly && !manual && self.localAttempts<3)dispatch_after(dispatch_time(DISPATCH_TIME_NOW,500*NSEC_PER_MSEC),dispatch_get_main_queue(),^{
+                if(self.localOnly && self.automatic && !self.suspended && self.keyboard && self.stage==3 && self.deviceHost+1==self.macChannel)[self selectChannel:self.macChannel manual:NO];
+            });
+            return;
+        }
         // MSI may stop replying on DDC after leaving the Mac's USB-C input.
         // A successful write is therefore reported as sent, not as read-back verified.
         [self status:[NSString stringWithFormat:@"Input command sent to %@", self.names[channel - 1]]];
@@ -391,6 +404,13 @@ static void hidRemoved(void *context, IOReturn result, void *sender, IOHIDDevice
     [self.prefs setBool:self.automatic forKey:@"automatic"];
     if (!self.automatic) { [self closeKeyboard]; [self stopNetworkListener]; [self status:@"Automatic switching paused"]; }
     [self rebuildMenu]; [self tick];
+}
+- (void)toggleLocal:(id)sender {
+    self.localOnly=!self.localOnly;[self.prefs setBool:self.localOnly forKey:@"localOnly"];
+    self.requestedChannel=NSNotFound;self.pendingChannel=NSNotFound;
+    if(self.localOnly){[self stopNetworkListener];[self status:@"Local mode · no network commands"];if(self.keyboard && self.stage==3 && self.deviceHost+1==self.macChannel)[self selectChannel:self.macChannel manual:NO];}
+    else {[self status:@"Network mode enabled"];[self startNetworkListener];}
+    [self rebuildMenu];
 }
 - (void)toggleTest:(id)sender { self.observeOnly = !self.observeOnly; [self.prefs setBool:self.observeOnly forKey:@"observeOnly"]; [self rebuildMenu]; [self status:self.observeOnly ? @"Diagnostic mode · monitor unchanged" : @"Automatic switching enabled"]; }
 - (void)sleep:(id)sender { self.requestedChannel = NSNotFound; self.suspended = YES; self.pendingChannel = NSNotFound; [self closeKeyboard]; [self stopNetworkListener]; }
@@ -607,7 +627,7 @@ static void hidRemoved(void *context, IOReturn result, void *sender, IOHIDDevice
 - (void)openLog:(id)sender { [NSWorkspace.sharedWorkspace openURL:[NSURL fileURLWithPath:self.logPath.stringByDeletingLastPathComponent]]; }
 - (void)about:(id)sender {
     NSAlert *alert = NSAlert.new; alert.messageText = @"MonitorSwitch";
-    alert.informativeText = @"MonitorSwitch 0.11.0-test1\n\nLocal Easy-Switch display control. No subscription, account or cloud.\n\nConfigure one macOS device and up to two Windows devices. Windows helpers confirm their channels over your local network. Only Logitech service reports are used; typed keys are not recorded.\n\nIncludes m1ddc (MIT).";
+    alert.informativeText = @"MonitorSwitch 0.12.0-test1\n\nLocal Easy-Switch display control. No subscription, account or cloud.\n\nConfigure one macOS device and up to two Windows devices. Windows helpers confirm their channels over your local network. Only Logitech service reports are used; typed keys are not recorded.\n\nIncludes m1ddc (MIT).";
     [NSApp activateIgnoringOtherApps:YES]; [alert runModal];
 }
 - (void)quit:(id)sender { [NSApp terminate:nil]; }

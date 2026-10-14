@@ -2,7 +2,15 @@
 
 A tray app that follows the physical Logitech Easy-Switch buttons and switches a shared monitor. No account, subscription, Windows service or administrator privileges are required.
 
-## Setup
+## Local setup (default in 0.12.0-test1)
+
+Download and run the single executable. Choose this computer's Easy-Switch number, its own monitor input code and monitor name. No Mac address or private key is required. Reopen **Local mode settings…** from the tray to change it. Existing installations keep their mappings and use local mode by default after upgrading, unless an explicit network-mode setting was saved.
+
+The worker confirms the keyboard on this channel, then writes the configured input through this computer's monitor connection, with up to three attempts. Local mode opens no UDP socket and does not start the network listener. It works independently of VPN routing when the monitor accepts DDC from its inactive input. If not, diagnostics show the identification/write failure; software cannot guarantee support from every monitor/driver.
+
+Sample current mapping: Device 1 → HDMI 1 / 17; Device 2 → HDMI 2 / 18; Mac Device 3 → USB-C / 16. The executable is identical for both Windows computers.
+
+## Optional network setup
 
 1. Configure the three device numbers and monitor inputs in the Mac app's **Setup devices…**.
 2. On the Mac choose **Pair Windows device…**, select this Windows computer's number and copy the code.
@@ -10,7 +18,7 @@ A tray app that follows the physical Logitech Easy-Switch buttons and switches a
 4. Right-click the icon near the clock (check the hidden-icons arrow) for **Launch at sign-in**, diagnostics or settings.
 5. Test the physical Easy-Switch buttons with all computers awake.
 
-The same executable supports either Windows number. Existing installations start with their saved settings; use **Connect to Mac…** to replace those settings with a new code. Reconnect after changing the Mac's address, device numbers or monitor inputs.
+The same executable supports either Windows number. Existing installations start with their saved settings; use **Network mode: connect to Mac…** to replace those settings with a new code. Reconnect after changing the Mac's address, device numbers or monitor inputs.
 
 **Advanced settings…** retains manual setup and **Import profile…** for older private JSON profiles. An adjacent `config.json` is imported only on first launch, when no saved settings exist. Stored settings take precedence. Imported input maps are preserved on Save.
 
@@ -22,7 +30,8 @@ Codes and private profiles authorize access: never publish them. The profile is 
 
 | Item | Behavior |
 | --- | --- |
-| Connect to Mac… | Replace settings using a fresh Mac pairing code. |
+| Local mode settings… | Configure standalone keyboard-to-input following, without network access. |
+| Network mode: connect to Mac… | Replace settings using a fresh Mac pairing code. |
 | Follow Easy-Switch | Enable or pause the connection worker inside the app. |
 | Advanced settings… | Import a private profile or edit this Windows device. Saving restarts the connection; an existing startup shortcut is refreshed. |
 | Launch at sign-in | Enable or disable startup for the current Windows account. The checkmark reflects the actual Startup shortcut. |
@@ -50,4 +59,4 @@ Requires Windows with .NET Framework 4.8 and an interactive user session. The ex
 
 ## Antivirus test build
 
-The current **0.11.0-test1** distribution is a compiled application without a PowerShell runtime. Kaspersky Endpoint Security reported `PDM:Trojan.Win32.Generic` against the previous `MonitorSwitch-Tray.ps1`. The cause and whether that was a false positive are not established. This unsigned test executable has not yet been validated with Kaspersky or the physical Windows devices. Keep antivirus enabled during testing; do not add exclusions or bypass organizational restrictions. If a warning occurs, quit the app and record the detection name, file path and diagnostic logs. Private profiles and configured archives must not be uploaded to scanning services.
+The current **0.12.0-test1** distribution is a compiled application without a PowerShell runtime. Kaspersky Endpoint Security reported `PDM:Trojan.Win32.Generic` against the previous `MonitorSwitch-Tray.ps1`. The cause and whether that was a false positive are not established. This unsigned test executable has not yet been validated with Kaspersky or the physical Windows devices. Keep antivirus enabled during testing; do not add exclusions or bypass organizational restrictions. If a warning occurs, quit the app and record the detection name, file path and diagnostic logs. Private profiles and configured archives must not be uploaded to scanning services.

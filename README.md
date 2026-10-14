@@ -4,6 +4,18 @@
 
 MonitorSwitch follows the **physical Logitech Easy-Switch buttons** and changes a shared monitor's input. A native macOS menu-bar app and small Windows tray companions coordinate over your local network. Free, local and open source: no subscription, account or cloud.
 
+## Local mode — no network or VPN dependency
+
+Version **0.12.0-test1** defaults to local operation. Each computer watches its own keyboard connection and sends DDC input selection through its own monitor cable when its configured Easy-Switch channel is confirmed. No UDP relay, pairing code or running Mac coordinator is needed in this mode.
+
+On Windows, run the single **MonitorSwitch.exe** and choose **Local mode settings…**. Set the local Easy-Switch number, its own monitor input code and monitor name. Fresh installations show this local setup directly. Existing profiles retain their input maps and default to local mode on upgrade. The current sample arrangement is Device 1 = HDMI 1 (`17`), Device 2 = HDMI 2 (`18`), Device 3 = Mac USB-C (`16`); use the codes appropriate to your monitor.
+
+On Mac, **Local mode (no network)** is checked by default. Select the Mac's device number and inputs in **Setup devices…**, and grant Input Monitoring. It only follows a confirmed connection to the Mac in this mode. Outgoing button reports and keyboard power-off do not select a guessed remote input. Manual input menu items remain available.
+
+**Hardware acceptance is still required:** the destination's inactive HDMI/USB-C connection must support DDC. A failed Windows write is retried up to three times; logs record whether the monitor was identified and the write accepted. If the monitor or driver rejects inactive-input commands, this software path cannot guarantee local-only automatic switching. The new local mode has not yet been physically validated on all three devices.
+
+The previous network mode remains optional: Windows **Network mode: connect to Mac…**, Mac uncheck **Local mode (no network)**. The following coordinator/pairing sections describe that optional mode. Corporate LAN filtering can still affect network mode; local mode does not modify or bypass VPN/firewall policies.
+
 ## How it works
 
 | Easy-Switch button | Device | Default monitor input |
@@ -73,7 +85,7 @@ The device checkmark represents the last requested channel. A successful DDC wri
 
 For macOS login startup, add the same app bundle to System Settings → General → Login Items. Keep the installed app at a stable path. A rebuild changes an ad-hoc signature and may require re-enabling Input Monitoring.
 
-Windows **0.11.0-test1** is an unsigned native test build. The previous PowerShell version triggered a Kaspersky behavior warning; antivirus compatibility and physical switching for the replacement remain pending. See [Windows README](windows/README.md#antivirus-test-build).
+Windows **0.12.0-test1** is an unsigned native test build. The previous PowerShell version triggered a Kaspersky behavior warning; antivirus compatibility and physical switching for the replacement remain pending. See [Windows README](windows/README.md#antivirus-test-build).
 
 ## Windows tray menu
 

@@ -34,7 +34,7 @@ public static class Pairing {
             using(var decrypt=aes.CreateDecryptor())clear=decrypt.TransformFinalBlock(encrypted,0,encrypted.Length);
         }
         try {
-            var profile=new JavaScriptSerializer().Deserialize<Profile>(Encoding.UTF8.GetString(clear));if(profile==null)throw new ArgumentException("Empty paired profile.");profile.Validate();
+            var profile=new JavaScriptSerializer().Deserialize<Profile>(Encoding.UTF8.GetString(clear));if(profile==null)throw new ArgumentException("Empty paired profile.");profile.localOnly=false;profile.Validate();
             if(profile.channel!=address.Channel || profile.macIP!=address.IP)throw new ArgumentException("The returned profile does not match the pairing code.");
             return profile;
         } finally {Array.Clear(clear,0,clear.Length);}

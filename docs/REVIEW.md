@@ -1,6 +1,12 @@
-# Implementation review — 0.11.0-test1
+# Implementation review — 0.12.0-test1
 
 MonitorSwitch is useful for its tested Logitech/MSI setup, but remains an experimental hardware integration. The following is a source review with automated checks, not a certification or universal compatibility claim.
+
+## Local mode change
+
+Local mode removes the network dependency: Windows does not create its UDP socket, MAC keys or receiver, and the Mac does not start its relay. Each device selects only its own configured input after a positively identified keyboard connection. Keyboard disconnection alone never guesses a destination. Network coordination remains optional. Existing profiles retain their input maps; explicit network-mode profiles remain supported.
+
+Local hardware support is not yet demonstrated on all three devices. Windows makes up to three DDC write attempts; success means command acceptance, not visual read-back. Inactive-input identification or write failure remains the primary hardware risk. The coordinator and fixed-address limitations below apply to optional network mode only.
 
 ## Corrected in this version
 
