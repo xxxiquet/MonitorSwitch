@@ -238,7 +238,7 @@ static void hidRemoved(void *context, IOReturn result, void *sender, IOHIDDevice
     self.networkTask = nil; self.networkPipe = nil; self.networkBuffer = nil;
 }
 - (void)networkOutput:(NSData *)data {
-    if (!self.networkBuffer || !self.automatic || self.suspended) return;
+    if (self.localOnly || !self.networkBuffer || !self.automatic || self.suspended) return;
     [self.networkBuffer appendData:data];
     const uint8_t newline = '\n';
     NSData *delimiter = [NSData dataWithBytes:&newline length:1];
@@ -345,7 +345,6 @@ static void hidRemoved(void *context, IOReturn result, void *sender, IOHIDDevice
         if (channel == self.macChannel) [self selectChannel:channel manual:NO];
         return;
     }
-    if(self.localOnly)return;
     NSInteger channel = targetFromReport(bytes, length, reportID, self.feature);
     if (channel == NSNotFound) return;
     [self status:[NSString stringWithFormat:@"Easy-Switch → %ld · %@", channel, self.names[channel - 1]]];
@@ -356,7 +355,6 @@ static void hidRemoved(void *context, IOReturn result, void *sender, IOHIDDevice
     if (!self.displayUUID.length) { [self status:@"Select your monitor in Setup devices first"]; return; }
     int input = self.inputs[channel - 1].intValue;
     if (!input) { [self status:[NSString stringWithFormat:@"No input configured for %@", self.names[channel - 1]]]; return; }
-    if (!manual && self.localOnly && channel != self.macChannel) return;
     if (!manual && self.observeOnly) { [self log:[NSString stringWithFormat:@"TEST: channel=%ld input=%d, monitor unchanged", channel, input]]; return; }
     if (!manual && self.requestedChannel == channel) return;
     self.requestedChannel = channel;
@@ -627,7 +625,7 @@ static void hidRemoved(void *context, IOReturn result, void *sender, IOHIDDevice
 - (void)openLog:(id)sender { [NSWorkspace.sharedWorkspace openURL:[NSURL fileURLWithPath:self.logPath.stringByDeletingLastPathComponent]]; }
 - (void)about:(id)sender {
     NSAlert *alert = NSAlert.new; alert.messageText = @"MonitorSwitch";
-    alert.informativeText = @"MonitorSwitch 0.12.0-test1\n\nLocal Easy-Switch display control. No subscription, account or cloud.\n\nConfigure one macOS device and up to two Windows devices. Windows helpers confirm their channels over your local network. Only Logitech service reports are used; typed keys are not recorded.\n\nIncludes m1ddc (MIT).";
+    alert.informativeText = @"MonitorSwitch 0.12.0-test2\n\nLocal Easy-Switch display control. No subscription, account or cloud.\n\nConfigure one macOS device and up to two Windows devices. Windows helpers confirm their channels over your local network. Only Logitech service reports are used; typed keys are not recorded.\n\nIncludes m1ddc (MIT).";
     [NSApp activateIgnoringOtherApps:YES]; [alert runModal];
 }
 - (void)quit:(id)sender { [NSApp terminate:nil]; }
@@ -638,6 +636,15 @@ static void hidRemoved(void *context, IOReturn result, void *sender, IOHIDDevice
         CFRelease(self.manager);
     }
 }
+@end
+
+@interface ParserTestMonitor : MonitorSwitch
+@property NSInteger selected;
+@end
+@implementation ParserTestMonitor
+- (void)status:(NSString *)value {}
+- (void)log:(NSString *)value {}
+- (void)selectChannel:(NSInteger)channel manual:(BOOL)manual {self.selected=channel;}
 @end
 
 static int selfTest(void) {
@@ -652,6 +659,11 @@ static int selfTest(void) {
     NSCAssert(targetFromReport(report, 20, 0x11, 0) == NSNotFound, @"unresolved feature"); count++;
     NSCAssert(targetFromReport(report, 20, 1, 9) == NSNotFound, @"ordinary keys are ignored"); count++;
     report[1] = 1; NSCAssert(targetFromReport(report, 20, 0x11, 9) == NSNotFound, @"wrong device"); count++;
+    ParserTestMonitor *local=ParserTestMonitor.new;local.localOnly=YES;local.automatic=YES;local.macChannel=3;local.feature=9;local.stage=3;local.deviceHost=2;local.names=@[@"Device 1",@"Device 2",@"Device 3"];
+    report[1]=0xff;report[4]=2;report[3]=0;
+    for(int target=1;target<=2;target++){report[5]=target-1;local.selected=0;[local received:report length:20 reportID:0x11];NSCAssert(local.selected==target,@"local mode follows outgoing numbered HID notification");count++;}
+    report[3]=0x0a;local.selected=0;[local received:report length:20 reportID:0x11];NSCAssert(local.selected==0,@"query reply does not select outgoing input");count++;
+    local.networkBuffer=NSMutableData.data;[local networkOutput:[@"MONITORSWITCH_CHANNEL:1\n" dataUsingEncoding:NSUTF8StringEncoding]];NSCAssert(local.selected==0,@"local mode ignores network events");count++;
     printf("%d parser checks passed. Hardware compatibility requires a real-device check.\n", count);
     return 0;
 }

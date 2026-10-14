@@ -23,7 +23,7 @@ cat > "$bundle/Contents/Info.plist" <<'PLIST'
 <key>CFBundleDisplayName</key><string>MonitorSwitch</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>0.12.0</string>
-<key>CFBundleVersion</key><string>16</string>
+<key>CFBundleVersion</key><string>17</string>
 <key>CFBundleIconFile</key><string>MonitorSwitch.icns</string>
 <key>NSLocalNetworkUsageDescription</key><string>Receive authenticated Easy-Switch device events on your local network to switch your display input.</string>
 <key>LSUIElement</key><true/>

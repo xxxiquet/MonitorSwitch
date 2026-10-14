@@ -67,7 +67,7 @@ public sealed class Profile {
 }
 
 public static class Store {
-    public const string Version = "0.12.0-test1";
+    public const string Version = "0.12.0-test2";
     public static readonly string Folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonitorSwitch", "Native");
     public static readonly string Config = Path.Combine(Folder, "config.json");
     public static readonly string Diagnostic = Path.Combine(Folder, "diagnostic.log");

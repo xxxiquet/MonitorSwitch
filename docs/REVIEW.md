@@ -4,7 +4,7 @@ MonitorSwitch is useful for its tested Logitech/MSI setup, but remains an experi
 
 ## Local mode change
 
-Local mode removes the network dependency: Windows does not create its UDP socket, MAC keys or receiver, and the Mac does not start its relay. Each device selects only its own configured input after a positively identified keyboard connection. Keyboard disconnection alone never guesses a destination. Network coordination remains optional. Existing profiles retain their input maps; explicit network-mode profiles remain supported.
+Local mode removes the network dependency: Windows does not create its UDP socket, MAC keys or receiver, and the Mac does not start its relay. Windows selects its own configured input after a positively identified keyboard connection. Mac also honors exact outgoing HID target notifications through its active USB-C cable; an absent notification still requires destination-side DDC. Keyboard disconnection alone never guesses a destination. Network coordination remains optional. Existing profiles retain their input maps; explicit network-mode profiles remain supported.
 
 Local hardware support is not yet demonstrated on all three devices. Windows makes up to three DDC write attempts; success means command acceptance, not visual read-back. Inactive-input identification or write failure remains the primary hardware risk. The coordinator and fixed-address limitations below apply to optional network mode only.
 
