@@ -67,7 +67,7 @@ public sealed class Profile {
 }
 
 public static class Store {
-    public const string Version = "0.12.0-test2";
+    public const string Version = "0.12.0-test3";
     public static readonly string Folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonitorSwitch", "Native");
     public static readonly string Config = Path.Combine(Folder, "config.json");
     public static readonly string Diagnostic = Path.Combine(Folder, "diagnostic.log");
@@ -139,6 +139,13 @@ public sealed class Engine : IDisposable {
                     string name = Encoding.UTF8.GetString(nameBytes.ToArray());
                     if (stopping || nameBytes.Count != length || name.IndexOf("MX Keys Mini",StringComparison.OrdinalIgnoreCase)<0) continue;
                     hid.EnableCapture(slot,feature[4],Store.Events);
+                    if(profile.localOnly)hid.EnableLocalSwitch(delegate(int target) {
+                        if(stopping || target==profile.channel)return;
+                        Store.Log("Local outgoing Easy-Switch target "+target);
+                        MonitorSwitchDdc.MonitorModel=profile.monitorModel;
+                        string result=MonitorSwitchDdc.SwitchInput(MonitorIdentity(),(uint)profile.inputs[target-1]);
+                        Store.Log("Local outgoing input "+profile.inputs[target-1]+": "+result);
+                    });
                     keep = true; return new Keyboard { Hid=hid, Slot=slot, Feature=feature[4], Name=name };
                 }
             } catch(Exception e) { Store.Log("HID lookup: "+e.Message); }
@@ -493,6 +500,10 @@ public static class Program {
             using(var icon=Icon.ExtractAssociatedIcon(Application.ExecutablePath)){if(icon==null || icon.Width<16)throw new Exception("Embedded icon missing");}
             byte[] notification=new byte[20];notification[0]=0x11;notification[1]=1;notification[2]=9;notification[4]=2;notification[5]=1;
             if(!MonitorSwitchHid.IsMacSwitchNotification(notification,1,9))throw new Exception("Bolt notification not recognized");
+            for(int target=1;target<=3;target++){notification[3]=0;notification[5]=(byte)(target-1);if(MonitorSwitchHid.LocalTarget(notification,1,9)!=target)throw new Exception("Local outgoing target not recognized");}
+            notification[3]=13;if(MonitorSwitchHid.LocalTarget(notification,1,9)!=0)throw new Exception("Query reply accepted as local target");
+            notification[3]=0;notification[5]=3;if(MonitorSwitchHid.LocalTarget(notification,1,9)!=0)throw new Exception("Invalid local target accepted");notification[5]=1;
+            notification[6]=1;if(MonitorSwitchHid.LocalTarget(notification,1,9)!=0)throw new Exception("Unexpected service data accepted as local target");notification[6]=0;
             notification[3]=13;if(MonitorSwitchHid.IsMacSwitchNotification(notification,1,9))throw new Exception("Query reply accepted as button notification");
             byte[] key=Store.Key(profile);string episode=new string('b',32),id=new string('c',32);long now=1000;
             MonitorSwitchDdc.ReturnInput=17;MonitorSwitchReturnListener.SetEpisode(episode);
@@ -530,7 +541,7 @@ public static class Program {
             try {profile.Save(Path.Combine(temp,"config.json"));profile.Save(Path.Combine(temp,"config.json"));if(File.ReadAllText(Path.Combine(temp,"config.json")).Contains(profile.key))throw new Exception("Plaintext pairing key stored");if(Profile.Read(Path.Combine(temp,"config.json")).key!=profile.key)throw new Exception("Profile persistence failed");}finally{if(Directory.Exists(temp))Directory.Delete(temp,true);}
             byte[] active=Store.Packet(profile,episode,false,true,key),inactive=Store.Packet(profile,episode,false,false,key);
             File.WriteAllText(report+".packets.json",new JavaScriptSerializer().Serialize(new Dictionary<string,object>{{"key",profile.key},{"packets",new[]{Encoding.UTF8.GetString(ready),Encoding.UTF8.GetString(active),Encoding.UTF8.GetString(inactive)}}}));
-            File.WriteAllText(report,"PASS: local profiles without network credentials, local setup UI, cross-platform encrypted pairing, DPAPI key storage, malformed packet rejection, profile validation, setup preserves imported input maps for all coordinator channels, embedded icon, exact Bolt notification, signed DDC input, replay/stale rejection, Windows targets 1/3, readiness packet.\n");return 0;
+            File.WriteAllText(report,"PASS: exact local outgoing targets 1/2/3 and malformed rejection, local profiles without network credentials, local setup UI, cross-platform encrypted pairing, DPAPI key storage, malformed packet rejection, profile validation, setup preserves imported input maps for all coordinator channels, embedded icon, exact Bolt notification, signed DDC input, replay/stale rejection, Windows targets 1/3, readiness packet.\n");return 0;
         }catch(Exception e){File.WriteAllText(report,"FAIL: "+e+"\n");return 1;}
     }
 }

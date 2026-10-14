@@ -62,6 +62,13 @@ public sealed class MonitorSwitchHid : IDisposable {
         stream = new FileStream(h, FileAccess.ReadWrite, 1, true); inLen=e.InputLen; outLen=e.OutputLen; isBolt=e.Pid==0xc548;
     }
     byte captureSlot, captureFeature; string capturePath, lastCapture; bool isBolt;
+    Action<int> localSwitch;
+    public void EnableLocalSwitch(Action<int> callback){localSwitch=callback;}
+    public static int LocalTarget(byte[] report,byte slot,byte feature) {
+        if(feature==0 || report==null || report.Length<20 || report.Length>64 || report[0]!=0x11 || report[1]!=slot || report[2]!=feature || report[3]!=0 || report[4]>3 || report[5]>2)return 0;
+        for(int index=6;index<report.Length;index++)if(report[index]!=0)return 0;
+        return report[5]+1;
+    }
     public void EnableCapture(byte slot,byte feature,string path) { captureSlot=slot; captureFeature=feature; capturePath=path; }
     public static bool IsMacSwitchNotification(byte[] report,byte slot,byte feature) {
         // Exact format observed three times on this MX Keys Mini for Business via Bolt.
@@ -72,6 +79,7 @@ public sealed class MonitorSwitchHid : IDisposable {
     }
     void Observe(byte[] report) {
         if(capturePath==null || report.Length<6 || (report[0]!=0x10 && report[0]!=0x11) || report[1]!=captureSlot || report[2]!=captureFeature) return;
+        if(isBolt && localSwitch!=null){int target=LocalTarget(report,captureSlot,captureFeature);if(target!=0)localSwitch(target);}
         if(isBolt && IsMacSwitchNotification(report,captureSlot,captureFeature)) MonitorSwitchReturnListener.ReturnImmediately("Bolt channel-2 notification");
         string hex=BitConverter.ToString(report).Replace('-', ' ');
         if(hex==lastCapture) return;
